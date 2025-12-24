@@ -82,6 +82,8 @@ class Player:
                 'avg_location_value': 0,
                 'choice_variety': 0,
                 'high_value_preference': 0,
+                'location_frequencies': {},
+                'total_choices': 0,
             }
 
         # Calculate statistics

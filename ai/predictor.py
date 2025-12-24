@@ -147,8 +147,8 @@ class AIPredictor:
             features.append(float(caught_count))
 
         else:
-            # No history - fill with zeros
-            features.extend([0.0] * 9)
+            # No history - fill with zeros (8 history features)
+            features.extend([0.0] * 8)
 
         # Items
         num_items = len(player.get_active_items())
