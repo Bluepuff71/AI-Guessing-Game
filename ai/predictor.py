@@ -314,18 +314,18 @@ class AIPredictor:
         # Prioritize most important reasons (max 2-3)
         return ", ".join(reasons[:3]).capitalize()
 
-    def decide_search_location(self, players: List[Player]) -> Tuple[Location, Dict[Player, Tuple]]:
+    def decide_search_location(self, players: List[Player]) -> Tuple[Location, Dict[Player, Tuple], str]:
         """
         Decide which location to search based on all player predictions.
 
-        Returns: (location_to_search, {player: (predicted_loc, confidence, reasoning)})
+        Returns: (location_to_search, {player: (predicted_loc, confidence, reasoning)}, search_reasoning)
         """
         alive_players = [p for p in players if p.alive]
         num_alive = len(alive_players)
 
         if num_alive == 0:
             # No players alive, return random
-            return self.location_manager.get_location(0), {}
+            return self.location_manager.get_location(0), {}, "No players remaining"
 
         # Get predictions for all players
         predictions = {}
@@ -335,9 +335,11 @@ class AIPredictor:
 
         # Calculate expected impact for each location
         location_impacts = {}
+        impact_details = {}  # Track why each location scored high
 
         for location in self.location_manager.get_all():
             impact = 0.0
+            contributors = []
 
             for player in alive_players:
                 predicted_loc, confidence, reasoning = predictions[player]
@@ -348,15 +350,34 @@ class AIPredictor:
                     win_threat = self._calculate_win_threat(player)
 
                     # Expected impact = confidence * threat
-                    impact += confidence * win_threat
+                    contribution = confidence * win_threat
+                    impact += contribution
+                    contributors.append((player.name, confidence, win_threat, contribution))
 
             location_impacts[location.name] = impact
+            impact_details[location.name] = contributors
 
         # Search location with highest expected impact
         best_location_name = max(location_impacts.items(), key=lambda x: x[1])[0]
         best_location = self.location_manager.get_location_by_name(best_location_name)
 
-        return best_location, predictions
+        # Generate reasoning
+        best_impact = location_impacts[best_location_name]
+        contributors = impact_details[best_location_name]
+
+        if contributors:
+            # Sort by contribution
+            top_contributors = sorted(contributors, key=lambda x: x[3], reverse=True)[:2]
+
+            reasoning_parts = []
+            for name, conf, threat, _ in top_contributors:
+                reasoning_parts.append(f"{name} ({conf:.0%} likely, {threat:.0%} threat)")
+
+            search_reasoning = f"Targeting {best_location_name}: " + " + ".join(reasoning_parts)
+        else:
+            search_reasoning = f"Random search: No strong predictions"
+
+        return best_location, predictions, search_reasoning
 
     def _calculate_win_threat(self, player: Player) -> float:
         """

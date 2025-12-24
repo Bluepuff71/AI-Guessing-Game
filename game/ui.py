@@ -33,8 +33,8 @@ def print_header(text: str):
     console.print(f"[bold cyan]{'=' * 50}[/bold cyan]\n")
 
 
-def print_standings(players: List[Player]):
-    """Print current standings."""
+def print_standings(players: List[Player], player_choices: Dict[Player, Location] = None):
+    """Print current standings with optional location choices."""
     alive_players = [p for p in players if p.alive]
     alive_players.sort(key=lambda p: p.points, reverse=True)
 
@@ -44,14 +44,30 @@ def print_standings(players: List[Player]):
     table.add_column("Points", justify="right", style="yellow")
     table.add_column("Items", style="magenta")
 
+    # Add choice column if choices are being tracked
+    if player_choices is not None:
+        table.add_column("Location Choice", style="cyan")
+
     for i, player in enumerate(alive_players, 1):
         items_str = ", ".join(item.name for item in player.get_active_items()) or "-"
-        table.add_row(
+
+        row = [
             f"{i}.",
             player.name,
             str(player.points),
             items_str
-        )
+        ]
+
+        # Add choice info if tracking
+        if player_choices is not None:
+            if player in player_choices:
+                loc = player_choices[player]
+                choice_str = f"{loc.emoji} {loc.name}"
+            else:
+                choice_str = "[dim]Pending...[/dim]"
+            row.append(choice_str)
+
+        table.add_row(*row)
 
     console.print(table)
     console.print()
@@ -69,9 +85,37 @@ def print_locations(location_manager: LocationManager):
     console.print()
 
 
+def print_shop_boxed():
+    """Print item shop in a bordered panel."""
+    from game.items import ItemShop, ItemType
+
+    ItemShop._load_items()
+
+    # Build shop content
+    lines = []
+    for i, item_type in enumerate(ItemType, 1):
+        item = ItemShop.ITEMS[item_type]
+        lines.append(f"[bold cyan][{i}][/bold cyan] [yellow]{item.name}[/yellow] - [green]{item.cost} pts[/green]")
+        lines.append(f"    [dim]{item.description}[/dim]")
+        if i < len(ItemType):
+            lines.append("")
+
+    lines.append("")
+    lines.append("[dim]Press Enter to skip purchase[/dim]")
+
+    panel = Panel(
+        "\n".join(lines),
+        title="🛒 ITEM SHOP",
+        border_style="yellow",
+        padding=(1, 2)
+    )
+
+    console.print(panel)
+
+
 def print_shop():
     """Print item shop."""
-    console.print(ItemShop.display_shop())
+    print_shop_boxed()
     console.print()
 
 
@@ -141,6 +185,15 @@ def show_ai_thinking():
         time.sleep(1.5)  # Dramatic pause
 
 
+def create_progress_spinner(description: str):
+    """Create a progress spinner for loading operations."""
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console
+    )
+
+
 def print_reveal_header():
     """Print reveal phase header."""
     print_header("REVEAL & RESOLUTION")
@@ -158,10 +211,17 @@ def print_player_choice(player: Player, location: Location, predicted_location: 
     console.print()
 
 
-def print_search_result(location: Location):
-    """Print which location the AI searched."""
+def print_search_result(location: Location, previous_location: Location = None, reasoning: str = ""):
+    """Print which location the AI searched and why."""
     console.print("[bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold cyan]")
     console.print(f"[bold red]🎯 AI SEARCHES: {location.emoji} {location.name.upper()}[/bold red]")
+
+    if reasoning:
+        console.print(f"[yellow]Reasoning: {reasoning}[/yellow]")
+
+    if previous_location:
+        console.print(f"[dim]Last round: {previous_location.emoji} {previous_location.name}[/dim]")
+
     console.print("[bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold cyan]")
     console.print()
 
@@ -178,9 +238,16 @@ def print_player_caught(player: Player, shield_saved: bool = False):
     console.print()
 
 
-def print_player_looted(player: Player, location: Location, points_earned: int):
+def print_player_looted(player: Player, location: Location, points_earned: int,
+                       base_roll: int = None, used_lucky_charm: bool = False):
     """Print that a player successfully looted."""
-    console.print(f"[green]✅ {player.name} looted {location.name}: +{points_earned} pts ({player.points} total)[/green]")
+    if used_lucky_charm and base_roll is not None:
+        # Show breakdown
+        breakdown = f"[{base_roll} x 2 (Lucky Charm)]"
+        console.print(f"[green]✅ {player.name} looted {location.name}: +{points_earned} pts {breakdown} ({player.points} total)[/green]")
+    else:
+        # Normal display
+        console.print(f"[green]✅ {player.name} looted {location.name}: +{points_earned} pts ({player.points} total)[/green]")
 
 
 def print_game_over(winner: Player):

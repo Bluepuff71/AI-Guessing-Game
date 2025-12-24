@@ -23,6 +23,8 @@ class GameEngine:
         self.game_over = False
         self.winner: Optional[Player] = None
         self.win_threshold = config.get('game', 'win_threshold', default=100)
+        self.scout_rolls: Dict[int, Dict[str, int]] = {}  # player_id -> {location_name: roll_value}
+        self.last_ai_search_location: Optional[Location] = None  # Track previous round's AI search
 
     def setup_game(self):
         """Initialize the game and get player names."""
@@ -34,9 +36,13 @@ class GameEngine:
         ui.console.print("But watch out - the AI is learning your patterns...")
         ui.console.print()
 
-        # Show AI status
+        # Show AI status with loading indicator
+        ui.console.print()
         if self.ai.use_ml:
-            info = self.ai.ml_trainer.get_model_info()
+            with ui.create_progress_spinner("Loading AI model...") as progress:
+                task = progress.add_task("", total=None)
+                info = self.ai.ml_trainer.get_model_info()
+
             ui.console.print(f"[cyan]🤖 AI Status: ML Model Active (trained on {info['num_games']} games, {info['training_samples']} samples)[/cyan]")
         else:
             ui.console.print("[yellow]🤖 AI Status: Baseline AI (No ML model yet - will train after 2+ games)[/yellow]")
@@ -75,8 +81,8 @@ class GameEngine:
             ui.clear()
             ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
 
-            # Show current standings
-            ui.print_standings(self.players)
+            # Show current standings WITH choices made so far
+            ui.print_standings(self.players, player_choices)
 
             # Show locations (same for all players this round)
             ui.print_locations(self.location_manager)
@@ -84,33 +90,24 @@ class GameEngine:
             # Shop phase
             self.shop_phase(player)
 
-            # If player has Scout, let them preview rolls
-            if any(item.type == ItemType.SCOUT and not item.consumed for item in player.items):
-                use_scout = ui.get_player_input("Use Scout to preview loot rolls? (y/n): ", None)
-                if use_scout.lower() == 'y':
-                    self.show_scout_preview(player)
-                    player.use_item(ItemType.SCOUT)
-                    ui.console.print()
-
             # Location choice
             location = self.choose_location_phase(player)
             player_choices[player] = location
 
-            # If player used Scanner, show predictions
+            # If player has Scanner, auto-activate it
             if any(item.type == ItemType.SCANNER and not item.consumed for item in player.items):
-                # Ask if they want to use it
-                use_scanner = ui.get_player_input("Use Scanner? (y/n): ", None)
-                if use_scanner.lower() == 'y':
-                    scanner_used_by.append(player)
-                    predictions = self.ai.get_scanner_predictions(self.players)
-                    ui.show_scanner_results(predictions)
-                    player.use_item(ItemType.SCANNER)
+                # Auto-use Scanner (no prompt)
+                scanner_used_by.append(player)
+                predictions = self.ai.get_scanner_predictions(self.players)
+                ui.console.print("\n[bold cyan]🔍 SCANNER AUTO-ACTIVATED:[/bold cyan]")
+                ui.show_scanner_results(predictions)
+                player.use_item(ItemType.SCANNER)
 
-                    # Let them change their choice
-                    change = ui.get_player_input("Change location choice? (y/n): ", None)
-                    if change.lower() == 'y':
-                        location = self.choose_location_phase(player)
-                        player_choices[player] = location
+                # Let them change their choice
+                change = ui.get_player_input("Change location choice? (y/n): ", None)
+                if change.lower() == 'y':
+                    location = self.choose_location_phase(player)
+                    player_choices[player] = location
 
             ui.console.print(f"[green]✓ {player.name} is ready![/green]")
             ui.console.input("[dim]Press Enter to continue...[/dim]")
@@ -120,10 +117,10 @@ class GameEngine:
         ui.show_ai_thinking()
 
         # AI decides where to search
-        search_location, predictions = self.ai.decide_search_location(self.players)
+        search_location, predictions, ai_reasoning = self.ai.decide_search_location(self.players)
 
         # Reveal and resolution
-        self.reveal_and_resolve_phase(player_choices, search_location, predictions)
+        self.reveal_and_resolve_phase(player_choices, search_location, predictions, ai_reasoning)
 
         # Check for game over
         self.check_game_over()
@@ -171,11 +168,19 @@ class GameEngine:
                     if player.buy_item(item):
                         ui.console.print(f"[green]✓ Bought {item.name} for {item.cost} pts[/green]")
 
-                        # If Intel Report, show it immediately
+                        # Auto-activate items based on type
                         if item_type == ItemType.INTEL_REPORT:
                             self.show_intel_report(player)
                             item.consumed = True  # Intel Report is consumed immediately
+                        elif item_type == ItemType.SCOUT:
+                            ui.console.input("\n[dim]Press Enter to see preview...[/dim]")
+                            self.show_scout_preview(player)
+                            player.use_item(ItemType.SCOUT)
 
+                        # Clear screen before redrawing shop
+                        ui.console.input("\n[dim]Press Enter to continue shopping...[/dim]")
+                        ui.clear()
+                        ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
                         ui.console.print()
                         # Continue loop to allow more purchases
                     else:
@@ -193,10 +198,14 @@ class GameEngine:
         """Show Scout preview of loot rolls for all locations."""
         ui.console.print("\n[bold cyan]📡 SCOUT PREVIEW - YOUR POTENTIAL ROLLS:[/bold cyan]\n")
 
+        # Clear and cache preview rolls for this player
+        self.scout_rolls[player.id] = {}
+
         # Generate preview rolls for all locations
         locations = self.location_manager.get_all()
         for i, loc in enumerate(locations, 1):
             preview_roll = loc.roll_points()
+            self.scout_rolls[player.id][loc.name] = preview_roll  # Cache it
             ui.console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{preview_roll:>2} pts[/yellow] [dim](range: {loc.get_range_str()})[/dim]")
 
         ui.console.print("\n[dim]Note: These are YOUR potential rolls. Other players will get different amounts.[/dim]")
@@ -251,7 +260,8 @@ class GameEngine:
 
     def reveal_and_resolve_phase(self, player_choices: Dict[Player, Location],
                                  search_location: Location,
-                                 predictions: Dict[Player, tuple]):
+                                 predictions: Dict[Player, tuple],
+                                 ai_reasoning: str = ""):
         """Reveal choices and resolve the round."""
         ui.clear()
         ui.print_reveal_header()
@@ -264,7 +274,7 @@ class GameEngine:
             ui.print_player_choice(player, chosen_location, predicted_loc, confidence, reasoning)
 
         # Show AI's search decision
-        ui.print_search_result(search_location)
+        ui.print_search_result(search_location, self.last_ai_search_location, ai_reasoning)
 
         # Resolve catches and looting
         for player in [p for p in self.players if p.alive]:
@@ -283,23 +293,27 @@ class GameEngine:
                 # Player successfully looted
                 has_lucky_charm = player.has_item(ItemType.LUCKY_CHARM)
 
-                # Ask if they want to use Lucky Charm
+                # Auto-use Lucky Charm if player has it
                 use_lucky_charm = False
                 if has_lucky_charm:
-                    ui.console.print(f"\n[yellow]{player.name} has Lucky Charm![/yellow]")
-                    use = ui.get_player_input("Use Lucky Charm to double points? (y/n): ", None)
-                    if use.lower() == 'y':
-                        use_lucky_charm = True
-                        player.use_item(ItemType.LUCKY_CHARM)
+                    use_lucky_charm = True
+                    ui.console.print(f"\n[yellow]✨ {player.name}'s Lucky Charm activated automatically![/yellow]")
+                    player.use_item(ItemType.LUCKY_CHARM)
 
                 # Roll individual points for this player
-                base_roll = chosen_location.roll_points()
+                # Check if this player used Scout and has a cached roll
+                if player.id in self.scout_rolls and chosen_location.name in self.scout_rolls[player.id]:
+                    base_roll = self.scout_rolls[player.id][chosen_location.name]
+                else:
+                    base_roll = chosen_location.roll_points()
+
                 points_earned = base_roll
                 if use_lucky_charm:
                     points_earned *= 2
 
                 player.add_points(points_earned, has_lucky_charm=False)  # Already handled doubling above
-                ui.print_player_looted(player, chosen_location, points_earned)
+                ui.print_player_looted(player, chosen_location, points_earned,
+                                      base_roll=base_roll, used_lucky_charm=use_lucky_charm)
 
                 # Record with base roll value for AI learning (not Lucky Charm doubled value)
                 player.record_choice(chosen_location, self.round_num, caught=False,
@@ -309,6 +323,12 @@ class GameEngine:
         ui.print_standings(self.players)
 
         ui.console.input("\n[dim]Press Enter to continue to next round...[/dim]")
+
+        # Clear scout rolls for next round
+        self.scout_rolls.clear()
+
+        # Store for next round display
+        self.last_ai_search_location = search_location
 
     def check_game_over(self):
         """Check if game is over and set winner."""
@@ -329,9 +349,21 @@ class GameEngine:
 
         # Check for last player standing
         if len(alive_players) == 1:
-            self.game_over = True
-            self.winner = alive_players[0]
-            return
+            last_player = alive_players[0]
+            ui.console.print(f"\n[yellow]🏆 {last_player.name} is the last player standing![/yellow]")
+            ui.console.print(f"[yellow]Current score: {last_player.points}/{self.win_threshold} points[/yellow]\n")
+
+            choice = ui.get_player_input("Continue playing to reach 100 points, or end game with victory? (continue/end): ", None)
+
+            if choice.lower().startswith('e'):  # 'end' or 'e'
+                self.game_over = True
+                self.winner = last_player
+                return
+            else:
+                # Continue solo play
+                ui.console.print("[cyan]Playing solo against the AI...[/cyan]\n")
+                ui.console.input("[dim]Press Enter to continue...[/dim]")
+                # Don't set game_over, keep playing
 
     def show_final_results(self):
         """Show final game results."""

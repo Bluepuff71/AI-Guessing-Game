@@ -481,6 +481,123 @@
           ]
         }
       ]
+    },
+    {
+      "num_players": 2,
+      "num_rounds": 5,
+      "winner": "Tom",
+      "players": [
+        {
+          "name": "Emery",
+          "final_points": 98,
+          "alive": false,
+          "rounds_survived": 4,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Casino Vault",
+              "location_value": 16,
+              "points_before": 0,
+              "points_earned": 16,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 2,
+              "location": "Bank Heist",
+              "location_value": 37,
+              "points_before": 16,
+              "points_earned": 37,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 3,
+              "location": "Bank Heist",
+              "location_value": 45,
+              "points_before": 53,
+              "points_earned": 45,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 4,
+              "location": "Corner Store",
+              "location_value": 0,
+              "points_before": 98,
+              "points_earned": 0,
+              "caught": true,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Casino Vault",
+            "Bank Heist",
+            "Bank Heist",
+            "Corner Store"
+          ]
+        },
+        {
+          "name": "Tom",
+          "final_points": 104,
+          "alive": true,
+          "rounds_survived": 5,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Casino Vault",
+              "location_value": 35,
+              "points_before": 0,
+              "points_earned": 35,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 2,
+              "location": "Bank Heist",
+              "location_value": 12,
+              "points_before": 22,
+              "points_earned": 12,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 3,
+              "location": "Bank Heist",
+              "location_value": 23,
+              "points_before": 12,
+              "points_earned": 46,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 4,
+              "location": "Jewelry Store",
+              "location_value": 21,
+              "points_before": 58,
+              "points_earned": 21,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 5,
+              "location": "Jewelry Store",
+              "location_value": 25,
+              "points_before": 79,
+              "points_earned": 25,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Casino Vault",
+            "Bank Heist",
+            "Bank Heist",
+            "Jewelry Store",
+            "Jewelry Store"
+          ]
+        }
+      ]
     }
   ]
 }
