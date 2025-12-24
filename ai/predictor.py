@@ -59,7 +59,7 @@ class AIPredictor:
             prediction = None
             if hasattr(player, 'profile_id') and player.profile_id:
                 try:
-                    player_prediction = self._player_ml_prediction(player, num_players_alive)
+                    player_prediction = self._player_ml_prediction(player, num_players_alive, event_manager)
                     if player_prediction:
                         prediction = player_prediction
                 except Exception:
@@ -69,7 +69,7 @@ class AIPredictor:
             # Try global ML prediction if available
             if not prediction and self.use_ml and self.ml_trainer:
                 try:
-                    prediction = self._ml_prediction(player, num_players_alive)
+                    prediction = self._ml_prediction(player, num_players_alive, event_manager)
                 except Exception as e:
                     # Fall back to baseline if ML fails
                     pass
@@ -81,7 +81,7 @@ class AIPredictor:
                     prediction = self._simple_pattern_prediction(player)
                 else:
                     # Late game (rounds 7+): Advanced prediction
-                    prediction = self._advanced_prediction(player, num_players_alive)
+                    prediction = self._advanced_prediction(player, num_players_alive, event_manager)
 
         # Adjust prediction based on events
         if event_manager:
@@ -147,10 +147,10 @@ class AIPredictor:
             "AI is still learning your patterns..."
         )
 
-    def _ml_prediction(self, player: Player, num_players_alive: int) -> Tuple[str, float, str]:
+    def _ml_prediction(self, player: Player, num_players_alive: int, event_manager=None) -> Tuple[str, float, str]:
         """ML-based prediction using trained LightGBM model."""
         # Extract features for this player
-        features = self._extract_ml_features(player, num_players_alive)
+        features = self._extract_ml_features(player, num_players_alive, event_manager)
 
         # Get predictions from model
         location_probs = self.ml_trainer.predict(features)
@@ -164,7 +164,7 @@ class AIPredictor:
 
         return (location_name, confidence, reasoning)
 
-    def _extract_ml_features(self, player: Player, num_players_alive: int) -> List[float]:
+    def _extract_ml_features(self, player: Player, num_players_alive: int, event_manager=None) -> List[float]:
         """Extract features for ML model (matches trainer feature extraction)."""
         features = []
 
@@ -225,9 +225,34 @@ class AIPredictor:
         num_items = len(player.get_active_items())
         features.append(float(num_items))
 
+        # Event features (optional - for newly trained models)
+        # Note: Old models trained without these features will still work
+        # since we only add if event_manager is provided during training
+        if event_manager:
+            features.append(float(len(event_manager.active_events)))  # num_active_events
+
+            # Check for event types
+            has_immunity = any(e.special_effect == "immunity" for e in event_manager.active_events)
+            has_catch = any(e.special_effect == "guaranteed_catch" for e in event_manager.active_events)
+            features.append(1.0 if has_immunity else 0.0)
+            features.append(1.0 if has_catch else 0.0)
+
+            # Point modifiers
+            max_modifier = 1.0
+            min_modifier = 1.0
+            for event in event_manager.active_events:
+                if event.point_modifier:
+                    test_val = event.point_modifier(10)
+                    modifier = test_val / 10.0
+                    max_modifier = max(max_modifier, modifier)
+                    min_modifier = min(min_modifier, modifier)
+
+            features.append(max_modifier)
+            features.append(min_modifier)
+
         return features
 
-    def _player_ml_prediction(self, player: Player, num_players_alive: int) -> Optional[Tuple[str, float, str]]:
+    def _player_ml_prediction(self, player: Player, num_players_alive: int, event_manager=None) -> Optional[Tuple[str, float, str]]:
         """Per-player ML prediction using trained personal model."""
         from ai.player_predictor import PlayerPredictor
         from game.profile_manager import ProfileManager
@@ -238,8 +263,8 @@ class AIPredictor:
         if not predictor.load_model():
             return None  # Model doesn't exist yet
 
-        # Extract features (same as global model)
-        features = self._extract_ml_features(player, num_players_alive)
+        # Extract features (same as global model, including events)
+        features = self._extract_ml_features(player, num_players_alive, event_manager)
 
         # Get predictions from personal model
         location_probs = predictor.predict(features)
@@ -287,29 +312,63 @@ class AIPredictor:
         return ", ".join(reasons[:3]).capitalize()
 
     def _simple_pattern_prediction(self, player: Player) -> Tuple[str, float, str]:
-        """Simple pattern matching based on frequency."""
+        """
+        Pattern matching with recency weighting.
+
+        Recent choices matter more than older ones to capture changing player behavior.
+        Uses exponential decay: recent choices weighted more heavily.
+        """
         if not player.choice_history:
             return self._random_prediction(player)
 
-        # Find most common location
-        from collections import Counter
-        location_counts = Counter(player.choice_history)
-        most_common = location_counts.most_common(1)[0]
-        most_common_name, count = most_common
+        # Use recency-weighted counting
+        # Weight = 2^(-decay_rate * age), where age = 0 (most recent) to N-1 (oldest)
+        # decay_rate of 0.3 means recent choices are ~2x more important than old ones
+        location_scores = {}
+        history_length = len(player.choice_history)
+        decay_rate = 0.3
 
-        # Calculate confidence with Laplace smoothing to prevent overconfidence on small samples
-        # Prevents 1/1 = 100%, instead makes it (1+1)/(1+num_locations) = more reasonable
+        # Process history from oldest to newest (reversed for easier indexing)
+        for age, location_name in enumerate(reversed(player.choice_history)):
+            # Calculate weight (2^(-0.3 * age))
+            # age=0 (most recent): weight = 1.0
+            # age=3: weight ≈ 0.4
+            # age=6: weight ≈ 0.2
+            weight = 2 ** (-decay_rate * age)
+
+            if location_name not in location_scores:
+                location_scores[location_name] = 0.0
+            location_scores[location_name] += weight
+
+        # Find location with highest weighted score
+        most_likely = max(location_scores.items(), key=lambda x: x[1])
+        most_likely_name, weighted_score = most_likely
+
+        # Calculate confidence based on weighted scores
+        total_weight = sum(location_scores.values())
+        confidence = weighted_score / total_weight if total_weight > 0 else 0.2
+
+        # Add Laplace smoothing to prevent overconfidence
         num_locations = len(self.location_manager.get_all())
-        total_choices = len(player.choice_history)
-        confidence = (count + 1) / (total_choices + num_locations)
+        confidence = (confidence + 0.1) / (1.0 + 0.1 * num_locations)
 
-        reasoning = f"You've picked {most_common_name} {count}/{len(player.choice_history)} times"
+        # Generate reasoning
+        # Count raw occurrences for display
+        from collections import Counter
+        raw_counts = Counter(player.choice_history)
+        total_picks = raw_counts[most_likely_name]
+        recent_picks = sum(1 for loc in player.choice_history[-3:] if loc == most_likely_name)
 
-        return (most_common_name, confidence, reasoning)
+        if recent_picks >= 2:
+            reasoning = f"{most_likely_name} picked {recent_picks}/3 recently (trending)"
+        else:
+            reasoning = f"{most_likely_name} picked {total_picks}/{history_length} times overall"
 
-    def _advanced_prediction(self, player: Player, num_players_alive: int) -> Tuple[str, float, str]:
+        return (most_likely_name, confidence, reasoning)
+
+    def _advanced_prediction(self, player: Player, num_players_alive: int, event_manager=None) -> Tuple[str, float, str]:
         """Advanced prediction using behavioral analysis."""
-        features = extract_features(player, self.round_num, num_players_alive, self.location_manager)
+        features = extract_features(player, self.round_num, num_players_alive, self.location_manager, event_manager)
 
         # Build prediction based on multiple factors
         location_scores = {}
@@ -476,25 +535,16 @@ class AIPredictor:
                     elif event.special_effect == "immunity":
                         location_impacts[location.name] = base_impact * 0.2
 
-        # Search location with highest expected impact (with some randomness to avoid being too predictable)
-        import random
+        # Select location using softmax (probabilistic selection weighted by impact)
+        # Calculate dynamic temperature based on game state
+        temperature = self._calculate_selection_temperature(
+            location_impacts,
+            alive_players,
+            rounds_since_catch=getattr(self, 'rounds_since_last_catch', 0)
+        )
 
-        # Sort locations by impact
-        sorted_locations = sorted(location_impacts.items(), key=lambda x: x[1], reverse=True)
-
-        # 70% of the time, choose the best location
-        # 30% of the time, choose from top 3 locations randomly (if they have any impact)
-        if random.random() < 0.7 or len(sorted_locations) == 1:
-            best_location_name = sorted_locations[0][0]
-        else:
-            # Choose from top 3 locations with non-zero impact
-            top_locations = [loc for loc, impact in sorted_locations[:3] if impact > 0]
-            if top_locations:
-                best_location_name = random.choice(top_locations)
-            else:
-                # All impacts are 0, choose randomly
-                best_location_name = random.choice([loc for loc, _ in sorted_locations])
-
+        # Use softmax to select location (naturally handles edge cases)
+        best_location_name = self._softmax_selection(location_impacts, temperature)
         best_location = self.location_manager.get_location_by_name(best_location_name)
 
         # Generate reasoning
@@ -514,6 +564,92 @@ class AIPredictor:
             search_reasoning = f"Random search: No strong predictions"
 
         return best_location, predictions, search_reasoning
+
+    def _softmax_selection(self, location_impacts: Dict[str, float], temperature: float = 0.5) -> str:
+        """
+        Select a location using softmax probability distribution.
+
+        Args:
+            location_impacts: Dict mapping location names to impact scores
+            temperature: Controls exploration vs exploitation
+                        - Low (0.1): Nearly deterministic, picks best ~95% of time
+                        - Medium (0.5): Balanced, best ~60-80% of time
+                        - High (1.0+): Exploratory, more random
+
+        Returns:
+            Selected location name
+        """
+        import random
+        import math
+
+        if not location_impacts:
+            # Fallback to random if no impacts
+            locations = [loc.name for loc in self.location_manager.get_all()]
+            return random.choice(locations)
+
+        # Handle all-zero case
+        max_impact = max(location_impacts.values())
+        if max_impact == 0:
+            # All impacts are zero, use uniform random
+            return random.choice(list(location_impacts.keys()))
+
+        # Compute softmax probabilities
+        # P(i) = exp(impact_i / T) / sum(exp(impact_j / T))
+        exp_values = {}
+        for loc_name, impact in location_impacts.items():
+            # Divide by temperature (higher T = more uniform)
+            exp_values[loc_name] = math.exp(impact / temperature)
+
+        total_exp = sum(exp_values.values())
+        probabilities = {loc: exp_val / total_exp for loc, exp_val in exp_values.items()}
+
+        # Sample from distribution
+        locations = list(probabilities.keys())
+        probs = [probabilities[loc] for loc in locations]
+
+        # Weighted random choice
+        return random.choices(locations, weights=probs, k=1)[0]
+
+    def _calculate_selection_temperature(self, location_impacts: Dict[str, float],
+                                        alive_players: List[Player],
+                                        rounds_since_catch: int = 0) -> float:
+        """
+        Calculate dynamic temperature for softmax selection based on game state.
+
+        Args:
+            location_impacts: Current location impact scores
+            alive_players: List of alive players
+            rounds_since_catch: Number of rounds since AI last caught someone
+
+        Returns:
+            Temperature value (0.1 to 1.5)
+        """
+        # Base temperature - balanced exploration/exploitation
+        temp = 0.5
+
+        # If impacts are similar, explore more (increase temperature)
+        if location_impacts:
+            impacts = list(location_impacts.values())
+            max_impact = max(impacts) if impacts else 0
+            avg_impact = sum(impacts) / len(impacts) if impacts else 0
+
+            # If best location is only slightly better than average, explore more
+            if max_impact > 0 and max_impact < 2 * avg_impact:
+                temp += 0.3
+
+        # If any player is close to winning, exploit more (decrease temperature)
+        max_score = max((p.points for p in alive_players), default=0)
+        win_threshold = config.get('game', 'win_threshold', default=100)
+
+        if max_score > 0.85 * win_threshold:  # 85+ points
+            temp -= 0.2
+
+        # If AI hasn't caught anyone recently, explore more (increase temperature)
+        if rounds_since_catch > 3:
+            temp += 0.2
+
+        # Clamp to reasonable range
+        return max(0.1, min(temp, 1.5))
 
     def _calculate_win_threat(self, player: Player) -> float:
         """

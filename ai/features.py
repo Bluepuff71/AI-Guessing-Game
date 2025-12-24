@@ -6,9 +6,16 @@ from game.config_loader import config
 
 
 def extract_features(player: Player, round_num: int, num_players_alive: int,
-                    location_manager: LocationManager) -> Dict[str, Any]:
+                    location_manager: LocationManager, event_manager=None) -> Dict[str, Any]:
     """
     Extract features from player state for ML prediction.
+
+    Args:
+        player: Player to extract features for
+        round_num: Current round number
+        num_players_alive: Number of alive players
+        location_manager: LocationManager instance
+        event_manager: Optional EventManager to extract event features
 
     Returns a dictionary of features that describe player behavior and context.
     """
@@ -36,8 +43,43 @@ def extract_features(player: Player, round_num: int, num_players_alive: int,
 
     # Item features
     active_items = player.get_active_items()
-    features['has_lucky_charm'] = any(item.name == "Lucky Charm" for item in active_items)
     features['num_items'] = len(active_items)
+
+    # Event features (game dynamics)
+    if event_manager:
+        features['num_active_events'] = len(event_manager.active_events)
+
+        # Check for specific event types across all locations
+        has_immunity = False
+        has_catch = False
+        max_point_modifier = 1.0
+        min_point_modifier = 1.0
+
+        for event in event_manager.active_events:
+            if event.special_effect == "immunity":
+                has_immunity = True
+            elif event.special_effect == "guaranteed_catch":
+                has_catch = True
+
+            # Track point modifiers if they exist
+            if event.point_modifier:
+                # Test the modifier with a sample value to see effect
+                test_val = event.point_modifier(10)
+                modifier_ratio = test_val / 10.0
+                max_point_modifier = max(max_point_modifier, modifier_ratio)
+                min_point_modifier = min(min_point_modifier, modifier_ratio)
+
+        features['has_immunity_event'] = 1 if has_immunity else 0
+        features['has_catch_event'] = 1 if has_catch else 0
+        features['max_event_point_modifier'] = max_point_modifier
+        features['min_event_point_modifier'] = min_point_modifier
+    else:
+        # No event manager, use default values
+        features['num_active_events'] = 0
+        features['has_immunity_event'] = 0
+        features['has_catch_event'] = 0
+        features['max_event_point_modifier'] = 1.0
+        features['min_event_point_modifier'] = 1.0
 
     # Recent history features (last 3 choices)
     recent_choices = player.choice_history[-3:] if len(player.choice_history) >= 3 else player.choice_history
