@@ -8,13 +8,12 @@ class TestItemType:
 
     def test_item_type_enum_values(self):
         """Test ItemType has correct enum values."""
-        assert ItemType.LUCKY_CHARM.value == "lucky_charm"
         assert ItemType.INTEL_REPORT.value == "intel_report"
         assert ItemType.SCOUT.value == "scout"
 
     def test_item_type_enum_count(self):
-        """Test ItemType has exactly 3 items."""
-        assert len(list(ItemType)) == 3
+        """Test ItemType has exactly 2 items."""
+        assert len(list(ItemType)) == 2
 
 
 class TestItem:
@@ -23,18 +22,18 @@ class TestItem:
     def test_item_initialization(self):
         """Test item initialization with all attributes."""
         item = Item(
-            ItemType.LUCKY_CHARM,
-            "Lucky Charm",
-            9,
-            "15% bonus points",
-            1.15
+            ItemType.INTEL_REPORT,
+            "Intel Report",
+            10,
+            "See your AI threat level",
+            1.0
         )
 
-        assert item.type == ItemType.LUCKY_CHARM
-        assert item.name == "Lucky Charm"
-        assert item.cost == 9
-        assert item.description == "15% bonus points"
-        assert item.multiplier == 1.15
+        assert item.type == ItemType.INTEL_REPORT
+        assert item.name == "Intel Report"
+        assert item.cost == 10
+        assert item.description == "See your AI threat level"
+        assert item.multiplier == 1.0
         assert item.consumed is False
 
     def test_item_initialization_default_multiplier(self):
@@ -56,13 +55,13 @@ class TestItem:
 
     def test_item_string_representation(self):
         """Test __str__ returns item name."""
-        item = Item(ItemType.LUCKY_CHARM, "Lucky Charm", 9, "Bonus", 1.15)
-        assert str(item) == "Lucky Charm"
+        item = Item(ItemType.SCOUT, "Scout", 6, "Preview", 1.0)
+        assert str(item) == "Scout"
 
     def test_item_repr(self):
         """Test __repr__ includes item name."""
-        item = Item(ItemType.LUCKY_CHARM, "Lucky Charm", 9, "Bonus", 1.15)
-        assert "Lucky Charm" in repr(item)
+        item = Item(ItemType.SCOUT, "Scout", 6, "Preview", 1.0)
+        assert "Scout" in repr(item)
 
 
 class TestItemShop:
@@ -76,7 +75,7 @@ class TestItemShop:
         ItemShop._load_items()
 
         assert ItemShop.ITEMS is not None
-        assert len(ItemShop.ITEMS) == 3
+        assert len(ItemShop.ITEMS) == 2
 
     def test_get_item_fresh_copy(self, temp_config_dir):
         """Test get_item returns fresh independent copies."""
@@ -96,21 +95,19 @@ class TestItemShop:
         """Test get_item works for all ItemType values."""
         ItemShop.ITEMS = None
 
-        lucky_charm = ItemShop.get_item(ItemType.LUCKY_CHARM)
         intel = ItemShop.get_item(ItemType.INTEL_REPORT)
         scout = ItemShop.get_item(ItemType.SCOUT)
 
-        assert lucky_charm.type == ItemType.LUCKY_CHARM
         assert intel.type == ItemType.INTEL_REPORT
         assert scout.type == ItemType.SCOUT
 
     def test_get_all_items(self, temp_config_dir):
-        """Test get_all_items returns all 3 items."""
+        """Test get_all_items returns all 2 items."""
         ItemShop.ITEMS = None
 
         items = ItemShop.get_all_items()
 
-        assert len(items) == 3
+        assert len(items) == 2
         assert all(isinstance(item, Item) for item in items)
 
     def test_item_shop_singleton_behavior(self, temp_config_dir):
@@ -128,23 +125,13 @@ class TestItemShop:
         # Should be the same dict instance
         assert items1 is items2
 
-    def test_item_multiplier_loading(self, temp_config_dir):
-        """Test Lucky Charm multiplier loads correctly from config."""
-        ItemShop.ITEMS = None
-
-        lucky_charm = ItemShop.get_item(ItemType.LUCKY_CHARM)
-
-        assert lucky_charm.multiplier == 1.15
-
     def test_item_cost_accuracy(self, temp_config_dir):
         """Test items have correct costs from config."""
         ItemShop.ITEMS = None
 
-        lucky_charm = ItemShop.get_item(ItemType.LUCKY_CHARM)
         intel = ItemShop.get_item(ItemType.INTEL_REPORT)
         scout = ItemShop.get_item(ItemType.SCOUT)
 
-        assert lucky_charm.cost == 9
         assert intel.cost == 10
         assert scout.cost == 6
 
@@ -155,10 +142,8 @@ class TestItemShop:
         display = ItemShop.display_shop()
 
         assert "ITEM SHOP" in display
-        assert "Lucky Charm" in display
         assert "Intel Report" in display
         assert "Scout" in display
-        assert "9 pts" in display
         assert "10 pts" in display
         assert "6 pts" in display
 
@@ -166,11 +151,9 @@ class TestItemShop:
         """Test item descriptions load from config."""
         ItemShop.ITEMS = None
 
-        lucky_charm = ItemShop.get_item(ItemType.LUCKY_CHARM)
         intel = ItemShop.get_item(ItemType.INTEL_REPORT)
         scout = ItemShop.get_item(ItemType.SCOUT)
 
-        assert "15% bonus" in lucky_charm.description
         assert "threat level" in intel.description
         assert "Preview" in scout.description
 

@@ -476,8 +476,25 @@ class AIPredictor:
                     elif event.special_effect == "immunity":
                         location_impacts[location.name] = base_impact * 0.2
 
-        # Search location with highest expected impact
-        best_location_name = max(location_impacts.items(), key=lambda x: x[1])[0]
+        # Search location with highest expected impact (with some randomness to avoid being too predictable)
+        import random
+
+        # Sort locations by impact
+        sorted_locations = sorted(location_impacts.items(), key=lambda x: x[1], reverse=True)
+
+        # 70% of the time, choose the best location
+        # 30% of the time, choose from top 3 locations randomly (if they have any impact)
+        if random.random() < 0.7 or len(sorted_locations) == 1:
+            best_location_name = sorted_locations[0][0]
+        else:
+            # Choose from top 3 locations with non-zero impact
+            top_locations = [loc for loc, impact in sorted_locations[:3] if impact > 0]
+            if top_locations:
+                best_location_name = random.choice(top_locations)
+            else:
+                # All impacts are 0, choose randomly
+                best_location_name = random.choice([loc for loc, _ in sorted_locations])
+
         best_location = self.location_manager.get_location_by_name(best_location_name)
 
         # Generate reasoning

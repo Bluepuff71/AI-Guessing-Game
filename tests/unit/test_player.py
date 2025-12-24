@@ -38,11 +38,11 @@ class TestPlayerInitialization:
     def test_player_string_with_items(self, temp_config_dir, sample_items):
         """Test __str__ includes active items."""
         player = Player(1, "Alice")
-        player.items.append(sample_items['lucky_charm'])
+        player.items.append(sample_items['scout'])
 
         player_str = str(player)
         assert "Alice" in player_str
-        assert "Lucky Charm" in player_str
+        assert "Scout" in player_str
 
 
 class TestPointManagement:
@@ -63,12 +63,6 @@ class TestPointManagement:
         player = Player(1, "Alice")
         player.add_points(0)
         assert player.points == 0
-
-    def test_add_points_with_lucky_charm_flag(self, temp_config_dir):
-        """Test points are doubled with has_lucky_charm flag."""
-        player = Player(1, "Alice")
-        player.add_points(10, has_lucky_charm=True)
-        assert player.points == 20  # Doubled
 
     def test_add_points_large_amount(self, temp_config_dir):
         """Test adding large point values."""
@@ -173,17 +167,17 @@ class TestItemManagement:
     def test_get_item_exists(self, temp_config_dir, sample_items):
         """Test get_item returns item when it exists."""
         player = Player(1, "Alice")
-        player.items.append(sample_items['lucky_charm'])
+        player.items.append(sample_items['scout'])
 
-        item = player.get_item(ItemType.LUCKY_CHARM)
+        item = player.get_item(ItemType.SCOUT)
 
         assert item is not None
-        assert item.type == ItemType.LUCKY_CHARM
+        assert item.type == ItemType.SCOUT
 
     def test_get_item_not_found(self, temp_config_dir):
         """Test get_item returns None when item doesn't exist."""
         player = Player(1, "Alice")
-        item = player.get_item(ItemType.LUCKY_CHARM)
+        item = player.get_item(ItemType.SCOUT)
         assert item is None
 
     def test_get_active_items(self, temp_config_dir, sample_items):
@@ -194,12 +188,12 @@ class TestItemManagement:
         scout = sample_items['scout']
         scout.consumed = True
         player.items.append(scout)
-        player.items.append(sample_items['lucky_charm'])
+        player.items.append(sample_items['intel_report'])
 
         active = player.get_active_items()
 
         assert len(active) == 1
-        assert active[0].type == ItemType.LUCKY_CHARM
+        assert active[0].type == ItemType.INTEL_REPORT
 
 
 class TestChoiceRecording:

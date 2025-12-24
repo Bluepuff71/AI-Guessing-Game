@@ -60,13 +60,6 @@ def temp_config_dir(tmp_path, monkeypatch):
     items = {
         "items": [
             {
-                "id": "lucky_charm",
-                "name": "Lucky Charm",
-                "cost": 9,
-                "description": "15% bonus points this round (single use)",
-                "multiplier": 1.15
-            },
-            {
                 "id": "intel_report",
                 "name": "Intel Report",
                 "cost": 10,
@@ -230,7 +223,6 @@ def mock_ml_model(monkeypatch):
 def sample_items(temp_config_dir):
     """Get sample items for testing."""
     return {
-        'lucky_charm': ItemShop.get_item(ItemType.LUCKY_CHARM),
         'intel_report': ItemShop.get_item(ItemType.INTEL_REPORT),
         'scout': ItemShop.get_item(ItemType.SCOUT)
     }

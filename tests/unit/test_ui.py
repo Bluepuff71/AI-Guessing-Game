@@ -72,7 +72,7 @@ class TestStandingsDisplay:
         console, output = mock_console
         player = Player(1, "Alice")
         player.points = 50
-        player.items.append(ItemShop.get_item(ItemType.LUCKY_CHARM))
+        player.items.append(ItemShop.get_item(ItemType.SCOUT))
 
         print_standings([player])
 
@@ -148,20 +148,6 @@ class TestPlayerFeedback:
         result = output.getvalue()
         assert "Alice" in result
         assert "7" in result
-
-    def test_print_player_looted_with_lucky_charm(self, mock_console, temp_config_dir):
-        """Test print_player_looted displays Lucky Charm multiplier."""
-        console, output = mock_console
-        player = Player(1, "Alice")
-        loc = Location("Test Store", "🏪", 5, 10)
-
-        print_player_looted(player, loc, points_earned=23, base_roll=20,
-                          used_lucky_charm=True, lucky_charm_multiplier=1.15)
-
-        result = output.getvalue()
-        assert "Alice" in result
-        # Should show multiplier breakdown
-        assert "1.15" in result or "15%" in result or "Lucky Charm" in result
 
 
 class TestInputHandling:

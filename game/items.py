@@ -6,7 +6,6 @@ from game.config_loader import config
 
 class ItemType(Enum):
     """Types of items available in the shop."""
-    LUCKY_CHARM = "lucky_charm"
     INTEL_REPORT = "intel_report"
     SCOUT = "scout"
 

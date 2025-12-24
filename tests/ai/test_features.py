@@ -31,7 +31,6 @@ class TestExtractFeatures:
         assert 'choice_variety' in features
         assert 'high_value_preference' in features
         assert 'total_choices' in features
-        assert 'has_lucky_charm' in features
         assert 'num_items' in features
         assert 'recent_avg_value' in features
         assert 'risk_trend' in features
@@ -76,22 +75,6 @@ class TestExtractFeatures:
         player3.points = 100
         features3 = extract_features(player3, 1, 2, loc_manager)
         assert features3['win_threat'] == 1.0
-
-    def test_extract_features_lucky_charm_detection(self, temp_config_dir, sample_location_manager, sample_items):
-        """Test Lucky Charm item detection."""
-        player = Player(1, "Alice")
-        loc_manager = sample_location_manager
-
-        # Without Lucky Charm
-        features1 = extract_features(player, 1, 2, loc_manager)
-        assert features1['has_lucky_charm'] is False
-        assert features1['num_items'] == 0
-
-        # With Lucky Charm
-        player.items.append(sample_items['lucky_charm'])
-        features2 = extract_features(player, 1, 2, loc_manager)
-        assert features2['has_lucky_charm'] is True
-        assert features2['num_items'] == 1
 
     def test_extract_features_risk_trend_increasing(self, temp_config_dir, sample_location_manager):
         """Test risk trend detection when player is escalating."""

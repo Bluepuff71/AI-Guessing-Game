@@ -250,7 +250,6 @@ class GameEngine:
             ui.console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{preview_roll:>2} pts[/yellow] [dim](range: {loc.get_range_str()})[/dim]")
 
         ui.console.print("\n[dim]Note: These are YOUR potential rolls. Other players will get different amounts.[/dim]")
-        ui.console.input("\n[dim]Press Enter to continue...[/dim]")
 
     def show_intel_report(self, player: Player):
         """Show Intel Report to a player."""
@@ -366,15 +365,6 @@ class GameEngine:
                 ui.print_post_game_report(player, insights)
             else:
                 # Player successfully looted
-                has_lucky_charm = player.has_item(ItemType.LUCKY_CHARM)
-
-                # Auto-use Lucky Charm if player has it
-                use_lucky_charm = False
-                if has_lucky_charm:
-                    use_lucky_charm = True
-                    ui.console.print(f"\n[yellow]✨ {player.name}'s Lucky Charm activated automatically![/yellow]")
-                    player.use_item(ItemType.LUCKY_CHARM)
-
                 # Roll individual points for this player
                 # Check if this player used Scout and has a cached roll
                 if player.id in self.scout_rolls and chosen_location.name in self.scout_rolls[player.id]:
@@ -383,32 +373,21 @@ class GameEngine:
                     base_roll = chosen_location.roll_points()
 
                 # Apply event point modifiers
-                points_after_event = self.event_manager.apply_point_modifier(chosen_location, base_roll)
+                points_earned = self.event_manager.apply_point_modifier(chosen_location, base_roll)
 
                 # Show event effect if points were modified
-                if points_after_event != base_roll:
+                if points_earned != base_roll:
                     event = self.event_manager.get_location_event(chosen_location)
                     if event:
                         ui.console.print(
                             f"  {event.emoji} [cyan]{event.name}:[/cyan] "
-                            f"{base_roll} → {points_after_event} points"
+                            f"{base_roll} → {points_earned} points"
                         )
 
-                points_earned = points_after_event
-                lucky_charm_multiplier = 1.0
-                if use_lucky_charm:
-                    # Get Lucky Charm item to access its multiplier
-                    lucky_charm_item = player.get_item(ItemType.LUCKY_CHARM)
-                    if lucky_charm_item:
-                        lucky_charm_multiplier = lucky_charm_item.multiplier
-                        points_earned = int(base_roll * lucky_charm_multiplier)
+                player.add_points(points_earned)
+                ui.print_player_looted(player, chosen_location, points_earned)
 
-                player.add_points(points_earned, has_lucky_charm=False)  # Already handled multiplier above
-                ui.print_player_looted(player, chosen_location, points_earned,
-                                      base_roll=base_roll, used_lucky_charm=use_lucky_charm,
-                                      lucky_charm_multiplier=lucky_charm_multiplier)
-
-                # Record with base roll value for AI learning (not Lucky Charm doubled value)
+                # Record choice for AI learning
                 player.record_choice(chosen_location, self.round_num, caught=False,
                                    points_earned=points_earned, location_value=base_roll)
 

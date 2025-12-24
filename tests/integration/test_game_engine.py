@@ -64,9 +64,9 @@ class TestShopPhase:
         player = game_engine.players[0]
         player.points = 20
 
-        # Mock console.input for all prompts: buy, preview, continue from preview, continue shopping, exit
+        # Mock console.input for all prompts: buy, continue shopping, exit
         import game.ui
-        inputs = iter(["3", "", "", "", ""])  # Buy 3, see preview, continue, continue shopping, exit
+        inputs = iter(["2", "", ""])  # Buy 2 (Scout), continue shopping, exit
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs))
 
         game_engine.shop_phase(player)
@@ -176,38 +176,6 @@ class TestRevealAndResolvePhase:
         assert player2.points > 30
         assert player1.alive
         assert player2.alive
-
-    def test_resolve_with_lucky_charm(self, game_engine, deterministic_random, monkeypatch):
-        """Test resolving when player has Lucky Charm."""
-        player1 = game_engine.players[0]
-        player2 = game_engine.players[1]
-        player1.points = 50
-        player2.points = 30
-        player1.items.append(ItemShop.get_item(ItemType.LUCKY_CHARM))
-
-        # Mock console.input for "Press Enter to continue" prompt
-        import game.ui
-        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
-
-        # Create choice where AI searches different location
-        loc1 = game_engine.location_manager.get_location(0)
-        loc2 = game_engine.location_manager.get_location(1)
-        loc3 = game_engine.location_manager.get_location(2)
-        player_choices = {player1: loc1, player2: loc2}
-
-        # Mock predictions for both players
-        predictions = {
-            player1: (loc2, 0.6, "AI predicted wrong location"),
-            player2: (loc3, 0.5, "AI predicted wrong location")
-        }
-
-        initial_points = player1.points
-        game_engine.reveal_and_resolve_phase(player_choices, loc3, predictions, "AI reasoning")
-
-        # Player should gain points with 1.15x multiplier
-        points_gained = player1.points - initial_points
-        assert points_gained > 0
-
 
 class TestGameOverChecking:
     """Tests for game over detection."""

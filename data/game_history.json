@@ -1978,6 +1978,162 @@
           ]
         }
       ]
+    },
+    {
+      "game_id": "29f627df-6382-4882-8302-0156d29967f8",
+      "timestamp": "2025-12-24T23:22:15.001441+00:00",
+      "num_players": 2,
+      "num_rounds": 0,
+      "winner": "AI",
+      "winner_profile_id": null,
+      "players": [
+        {
+          "profile_id": null,
+          "name": "Alice",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        },
+        {
+          "profile_id": null,
+          "name": "Bob",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        }
+      ]
+    },
+    {
+      "game_id": "4e7813b7-560c-48f0-b0da-50025331c616",
+      "timestamp": "2025-12-24T23:27:04.238626+00:00",
+      "num_players": 2,
+      "num_rounds": 0,
+      "winner": "AI",
+      "winner_profile_id": null,
+      "players": [
+        {
+          "profile_id": null,
+          "name": "Alice",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        },
+        {
+          "profile_id": null,
+          "name": "Bob",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        }
+      ]
+    },
+    {
+      "game_id": "bbdce561-8fb7-4dd6-af6f-db06671942e1",
+      "timestamp": "2025-12-24T23:27:35.975633+00:00",
+      "num_players": 2,
+      "num_rounds": 0,
+      "winner": "AI",
+      "winner_profile_id": null,
+      "players": [
+        {
+          "profile_id": null,
+          "name": "Alice",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        },
+        {
+          "profile_id": null,
+          "name": "Bob",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        }
+      ]
     }
   ]
 }

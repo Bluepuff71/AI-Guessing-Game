@@ -1,13 +1,6 @@
 {
   "items": [
     {
-      "id": "lucky_charm",
-      "name": "Lucky Charm",
-      "cost": 9,
-      "description": "15% bonus points this round (single use)",
-      "multiplier": 1.15
-    },
-    {
       "id": "intel_report",
       "name": "Intel Report",
       "cost": 10,

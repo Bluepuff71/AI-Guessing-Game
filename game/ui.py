@@ -276,17 +276,9 @@ def print_player_caught(player: Player, shield_saved: bool = False):
     console.print()
 
 
-def print_player_looted(player: Player, location: Location, points_earned: int,
-                       base_roll: int = None, used_lucky_charm: bool = False,
-                       lucky_charm_multiplier: float = 1.0):
+def print_player_looted(player: Player, location: Location, points_earned: int):
     """Print that a player successfully looted."""
-    if used_lucky_charm and base_roll is not None:
-        # Show breakdown with actual multiplier
-        breakdown = f"[{base_roll} x {lucky_charm_multiplier} (Lucky Charm)]"
-        console.print(f"[green]✅ {player.name} looted {location.name}: +{points_earned} pts {breakdown} ({player.points} total)[/green]")
-    else:
-        # Normal display
-        console.print(f"[green]✅ {player.name} looted {location.name}: +{points_earned} pts ({player.points} total)[/green]")
+    console.print(f"[green]✅ {player.name} looted {location.name}: +{points_earned} pts ({player.points} total)[/green]")
 
 
 def print_game_over(winner: Player):

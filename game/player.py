@@ -19,10 +19,8 @@ class Player:
         self.choice_history: List[str] = []  # Location names chosen
         self.round_history: List[Dict[str, Any]] = []  # Full round data
 
-    def add_points(self, points: int, has_lucky_charm: bool = False):
-        """Add points to player (with optional Lucky Charm doubling)."""
-        if has_lucky_charm:
-            points *= 2
+    def add_points(self, points: int):
+        """Add points to player."""
         self.points += points
 
     def buy_item(self, item: Item) -> bool:
