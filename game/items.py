@@ -61,7 +61,7 @@ class ItemShop:
         """Get a fresh copy of an item."""
         cls._load_items()
         original = cls.ITEMS[item_type]
-        return Item(original.type, original.name, original.cost, original.description)
+        return Item(original.type, original.name, original.cost, original.description, original.multiplier)
 
     @classmethod
     def get_all_items(cls) -> List[Item]:
