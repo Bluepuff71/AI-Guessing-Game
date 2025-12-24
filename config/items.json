@@ -3,25 +3,25 @@
     {
       "id": "scanner",
       "name": "Scanner",
-      "cost": 25,
+      "cost": 13,
       "description": "See AI's top 2 predicted search locations"
     },
     {
       "id": "lucky_charm",
       "name": "Lucky Charm",
-      "cost": 18,
+      "cost": 9,
       "description": "Double points this round (single use)"
     },
     {
       "id": "intel_report",
       "name": "Intel Report",
-      "cost": 20,
+      "cost": 10,
       "description": "See your AI threat level and predictability"
     },
     {
       "id": "scout",
       "name": "Scout",
-      "cost": 12,
+      "cost": 6,
       "description": "Preview loot rolls before choosing (single use)"
     }
   ]
