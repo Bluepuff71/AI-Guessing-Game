@@ -140,15 +140,6 @@ def get_player_input(prompt: str, valid_range: range = None) -> str:
             return response
 
 
-def show_scanner_results(predictions: List[tuple]):
-    """Show Scanner item results (AI's top predictions)."""
-    console.print("\n[bold cyan]🔍 SCANNER ACTIVATED:[/bold cyan]")
-    console.print("AI's top search predictions:")
-    for i, (location_name, confidence, reason) in enumerate(predictions[:2], 1):
-        console.print(f"{i}. [yellow]{location_name}[/yellow] (confidence: {confidence:.0%}) - \"{reason}\"")
-    console.print()
-
-
 def show_intel_report(player: Player, threat_level: float, predictability: float, insights: List[str]):
     """Show Intel Report for a player."""
     console.print()
@@ -244,11 +235,12 @@ def print_player_caught(player: Player, shield_saved: bool = False):
 
 
 def print_player_looted(player: Player, location: Location, points_earned: int,
-                       base_roll: int = None, used_lucky_charm: bool = False):
+                       base_roll: int = None, used_lucky_charm: bool = False,
+                       lucky_charm_multiplier: float = 1.0):
     """Print that a player successfully looted."""
     if used_lucky_charm and base_roll is not None:
-        # Show breakdown
-        breakdown = f"[{base_roll} x 2 (Lucky Charm)]"
+        # Show breakdown with actual multiplier
+        breakdown = f"[{base_roll} x {lucky_charm_multiplier} (Lucky Charm)]"
         console.print(f"[green]✅ {player.name} looted {location.name}: +{points_earned} pts {breakdown} ({player.points} total)[/green]")
     else:
         # Normal display

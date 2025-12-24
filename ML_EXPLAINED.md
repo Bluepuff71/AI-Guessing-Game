@@ -233,7 +233,7 @@ AI is now significantly smarter
 ### Mid Games (Early ML)
 - Start varying your choices
 - Buy Intel Reports to see if you're predictable
-- Use Scanner to avoid top predictions
+- Use Scout to preview rolls and make strategic choices
 
 ### Late Games (Advanced ML)
 - Actively break patterns

@@ -22,10 +22,9 @@ python main.py
 ### Each Round
 
 1. **Shop Phase** - Buy items if you want:
-   - **Shield** (15 pts) - Survive getting caught once
-   - **Scanner** (25 pts) - See where AI will likely search
-   - **Lucky Charm** (18 pts) - Double your points this round
-   - **Intel Report** (20 pts) - See how predictable you are
+   - **Lucky Charm** (9 pts) - 15% bonus points this round
+   - **Intel Report** (10 pts) - See how predictable you are
+   - **Scout** (6 pts) - Preview loot rolls before choosing
 
 2. **Choose Location** - Pick where to loot (1-8):
    - Higher point locations = higher risk (AI targets them)
@@ -50,8 +49,8 @@ python main.py
 ⚔️ **Late Game (Rounds 7+)**
 - AI knows your habits!
 - If you're close to 100, AI will hunt you hard
-- Use Scanner to avoid AI's top targets
 - Consider going low-value to survive
+- Use Scout to preview rolls and make informed choices
 
 ### Key Mechanics
 
@@ -90,14 +89,9 @@ Available Loot:
 ...
 
 Your turn:
-> Buy item? (1-4 or skip): 2
-✓ Bought Scanner for 25 pts
+> Buy item? (1-4 or skip): skip
 
-🔍 SCANNER RESULTS:
-1. Bank Vault (87%) - "High win threat detected"
-2. Jewelry Store (68%) - "Multiple aggressive players"
-
-> Choose location (1-8): 2
+> Choose location (1-5): 2
 You chose: Pharmacy (11 pts)
 
 ...AI analyzes...
@@ -110,8 +104,8 @@ You chose: Pharmacy (11 pts)
 
 ## Winning Strategies
 
-1. **The Opportunist** - Use Scanner every round, avoid the AI
-2. **The Gambler** - Go for Bank Vault early, use Shield when caught
+1. **The Scout** - Use Scout to preview rolls, maximize every heist
+2. **The Gambler** - Go for high-variance locations, use Lucky Charm when you hit big
 3. **The Ghost** - Stay unpredictable, fly under the radar
 4. **The Analyst** - Buy Intel Reports, adapt based on feedback
 

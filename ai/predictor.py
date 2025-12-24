@@ -297,8 +297,6 @@ class AIPredictor:
         # Items
         if features['has_lucky_charm']:
             reasons.append("has Lucky Charm (likely targeting high-value)")
-        if features['has_scanner']:
-            reasons.append("used Scanner (may avoid predicted areas)")
 
         # Predictability
         predictability = calculate_predictability(player)
@@ -413,48 +411,6 @@ class AIPredictor:
         total_threat = min(1.0, points_threat + catch_likelihood)
 
         return total_threat
-
-    def get_scanner_predictions(self, players: List[Player]) -> List[Tuple[str, float, str]]:
-        """
-        Get top 2 location predictions for Scanner item.
-
-        Returns: [(location_name, confidence, reason), ...]
-        """
-        alive_players = [p for p in players if p.alive]
-        location_impacts = {}
-
-        for location in self.location_manager.get_all():
-            impact = 0.0
-
-            for player in alive_players:
-                pred_loc, confidence, reasoning = self.predict_player_location(player, len(alive_players))
-
-                if pred_loc == location.name:
-                    win_threat = self._calculate_win_threat(player)
-                    impact += confidence * win_threat
-
-            location_impacts[location.name] = impact
-
-        # Sort by impact and get top 2
-        sorted_locations = sorted(location_impacts.items(), key=lambda x: x[1], reverse=True)
-
-        results = []
-        for loc_name, impact in sorted_locations[:2]:
-            # Generate reason based on impact
-            if impact > 0.7:
-                reason = "High win threat detected"
-            elif impact > 0.4:
-                reason = "Multiple aggressive players predicted"
-            else:
-                reason = "Moderate threat level"
-
-            # Impact as confidence (normalize)
-            max_impact = sorted_locations[0][1] if sorted_locations else 1.0
-            confidence = impact / max_impact if max_impact > 0 else 0.5
-
-            results.append((loc_name, confidence, reason))
-
-        return results
 
     def reset_round(self):
         """Reset for a new round."""

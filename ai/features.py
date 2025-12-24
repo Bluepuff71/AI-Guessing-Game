@@ -36,8 +36,6 @@ def extract_features(player: Player, round_num: int, num_players_alive: int,
 
     # Item features
     active_items = player.get_active_items()
-    features['has_shield'] = any(item.name == "Shield" for item in active_items)
-    features['has_scanner'] = any(item.name == "Scanner" for item in active_items)
     features['has_lucky_charm'] = any(item.name == "Lucky Charm" for item in active_items)
     features['num_items'] = len(active_items)
 

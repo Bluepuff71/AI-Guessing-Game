@@ -71,7 +71,6 @@ class GameEngine:
         """Play a single round."""
         # Track player choices for this round
         player_choices: Dict[Player, Location] = {}
-        scanner_used_by = []
 
         # Each player's turn to shop and choose location
         alive_players = [p for p in self.players if p.alive]
@@ -93,21 +92,6 @@ class GameEngine:
             # Location choice
             location = self.choose_location_phase(player)
             player_choices[player] = location
-
-            # If player has Scanner, auto-activate it
-            if any(item.type == ItemType.SCANNER and not item.consumed for item in player.items):
-                # Auto-use Scanner (no prompt)
-                scanner_used_by.append(player)
-                predictions = self.ai.get_scanner_predictions(self.players)
-                ui.console.print("\n[bold cyan]🔍 SCANNER AUTO-ACTIVATED:[/bold cyan]")
-                ui.show_scanner_results(predictions)
-                player.use_item(ItemType.SCANNER)
-
-                # Let them change their choice
-                change = ui.get_player_input("Change location choice? (y/n): ", None)
-                if change.lower() == 'y':
-                    location = self.choose_location_phase(player)
-                    player_choices[player] = location
 
             ui.console.print(f"[green]✓ {player.name} is ready![/green]")
             ui.console.input("[dim]Press Enter to continue...[/dim]")
@@ -181,6 +165,10 @@ class GameEngine:
                         ui.console.input("\n[dim]Press Enter to continue shopping...[/dim]")
                         ui.clear()
                         ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
+
+                        # Show locations so player has context
+                        ui.print_locations(self.location_manager, self.last_ai_search_location)
+
                         ui.console.print()
                         # Continue loop to allow more purchases
                     else:
@@ -308,12 +296,18 @@ class GameEngine:
                     base_roll = chosen_location.roll_points()
 
                 points_earned = base_roll
+                lucky_charm_multiplier = 1.0
                 if use_lucky_charm:
-                    points_earned *= 2
+                    # Get Lucky Charm item to access its multiplier
+                    lucky_charm_item = player.get_item(ItemType.LUCKY_CHARM)
+                    if lucky_charm_item:
+                        lucky_charm_multiplier = lucky_charm_item.multiplier
+                        points_earned = int(base_roll * lucky_charm_multiplier)
 
-                player.add_points(points_earned, has_lucky_charm=False)  # Already handled doubling above
+                player.add_points(points_earned, has_lucky_charm=False)  # Already handled multiplier above
                 ui.print_player_looted(player, chosen_location, points_earned,
-                                      base_roll=base_roll, used_lucky_charm=use_lucky_charm)
+                                      base_roll=base_roll, used_lucky_charm=use_lucky_charm,
+                                      lucky_charm_multiplier=lucky_charm_multiplier)
 
                 # Record with base roll value for AI learning (not Lucky Charm doubled value)
                 player.record_choice(chosen_location, self.round_num, caught=False,

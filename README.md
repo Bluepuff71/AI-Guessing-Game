@@ -45,10 +45,9 @@ A strategic text-based party game where players compete to reach 100 points by l
 
 | Item | Cost | Effect |
 |------|------|--------|
-| **Shield** | 15 pts | Survive one capture (single use) |
-| **Scanner** | 25 pts | See AI's top 2 predicted locations (single use) |
-| **Lucky Charm** | 18 pts | Double your points this round (single use) |
-| **Intel Report** | 20 pts | See your AI threat level & predictability |
+| **Lucky Charm** | 9 pts | 15% bonus points this round (single use) |
+| **Intel Report** | 10 pts | See your AI threat level & predictability |
+| **Scout** | 6 pts | Preview loot rolls before choosing (single use) |
 
 ## Strategy Tips
 

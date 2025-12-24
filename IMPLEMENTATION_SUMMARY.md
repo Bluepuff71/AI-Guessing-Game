@@ -7,8 +7,8 @@ A complete **strategic looting game** with an **adaptive AI** that learns from p
 ## ✅ Completed Features
 
 ### Core Game (100% Complete)
-- [x] 8 diverse looting locations with dynamic point values
-- [x] 4 strategic items (Shield, Scanner, Lucky Charm, Intel Report)
+- [x] 5 diverse looting locations with distinct risk/reward profiles
+- [x] 3 strategic items (Lucky Charm, Intel Report, Scout)
 - [x] Full game loop: Shop → Choose → AI Search → Resolve
 - [x] Win conditions: Reach 100 points or last standing
 - [x] Beautiful terminal UI with Rich library
@@ -40,7 +40,7 @@ A complete **strategic looting game** with an **adaptive AI** that learns from p
 - [x] Intel Report shows predictability score
 - [x] Post-game breakdown with improvement tips
 - [x] Clear reasoning for AI decisions
-- [x] Scanner shows live AI predictions
+- [x] Scout shows preview rolls for all locations
 
 ## 📁 Project Structure
 

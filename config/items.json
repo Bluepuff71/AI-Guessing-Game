@@ -1,16 +1,11 @@
 {
   "items": [
     {
-      "id": "scanner",
-      "name": "Scanner",
-      "cost": 13,
-      "description": "See AI's top 2 predicted search locations"
-    },
-    {
       "id": "lucky_charm",
       "name": "Lucky Charm",
       "cost": 9,
-      "description": "Double points this round (single use)"
+      "description": "15% bonus points this round (single use)",
+      "multiplier": 1.15
     },
     {
       "id": "intel_report",

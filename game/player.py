@@ -45,6 +45,13 @@ class Player:
                 return item
         return None
 
+    def get_item(self, item_type: ItemType) -> Optional[Item]:
+        """Get a specific item by type."""
+        for item in self.items:
+            if item.type == item_type:
+                return item
+        return None
+
     def get_active_items(self) -> List[Item]:
         """Get list of items that haven't been consumed."""
         return [item for item in self.items if not item.consumed]
