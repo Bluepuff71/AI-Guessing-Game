@@ -61,17 +61,8 @@ class GameEngine:
 
     def play_round(self):
         """Play a single round."""
-        ui.clear()
-        ui.print_header(f"ROUND {self.round_num} - SETUP")
-
         # Randomize location values for this round
         self.location_manager.randomize_all_points()
-
-        # Show standings
-        ui.print_standings(self.players)
-
-        # Show locations
-        ui.print_locations(self.location_manager)
 
         # Track player choices for this round
         player_choices: Dict[Player, Location] = {}
@@ -81,9 +72,15 @@ class GameEngine:
         alive_players = [p for p in self.players if p.alive]
 
         for player in alive_players:
-            ui.console.print(f"\n[bold cyan]{'─' * 50}[/bold cyan]")
-            ui.console.print(f"[bold cyan]{player.name}'s Turn[/bold cyan]")
-            ui.console.print(f"[bold cyan]{'─' * 50}[/bold cyan]\n")
+            # Clear console and show fresh context for this player
+            ui.clear()
+            ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
+
+            # Show current standings
+            ui.print_standings(self.players)
+
+            # Show locations (same for all players this round)
+            ui.print_locations(self.location_manager)
 
             # Shop phase
             self.shop_phase(player)

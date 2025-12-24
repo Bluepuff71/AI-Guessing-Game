@@ -1431,6 +1431,53 @@
           ]
         }
       ]
+    },
+    {
+      "num_players": 2,
+      "num_rounds": 1,
+      "winner": "Emery",
+      "players": [
+        {
+          "name": "Emery",
+          "final_points": 40,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Bank Vault",
+              "location_value": 40,
+              "points_before": 0,
+              "points_earned": 40,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Bank Vault"
+          ]
+        },
+        {
+          "name": "Tom",
+          "final_points": 0,
+          "alive": false,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Jewelry Store",
+              "location_value": 19,
+              "points_before": 0,
+              "points_earned": 0,
+              "caught": true,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Jewelry Store"
+          ]
+        }
+      ]
     }
   ]
 }

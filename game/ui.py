@@ -51,20 +51,12 @@ def print_standings(players: List[Player]):
 
 def print_locations(location_manager: LocationManager):
     """Print available loot locations."""
-    console.print("[bold]AVAILABLE LOOT THIS ROUND:[/bold]")
+    console.print("[bold]AVAILABLE LOOT THIS ROUND:[/bold]\n")
 
-    # Create 2-column layout
+    # Clean single-column list
     locations = location_manager.get_all()
-    for i in range(0, len(locations), 2):
-        left = locations[i]
-        left_str = f"[{i+1}] {left.emoji} {left.name}: [yellow]{left.current_points} pts[/yellow]"
-
-        if i + 1 < len(locations):
-            right = locations[i + 1]
-            right_str = f"[{i+2}] {right.emoji} {right.name}: [yellow]{right.current_points} pts[/yellow]"
-            console.print(f"{left_str:<40} {right_str}")
-        else:
-            console.print(left_str)
+    for i, loc in enumerate(locations, 1):
+        console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{loc.current_points:>2} pts[/yellow]")
 
     console.print()
 
