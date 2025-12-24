@@ -178,7 +178,6 @@ class GameEngine:
                             self.show_intel_report(player)
                             item.consumed = True  # Intel Report is consumed immediately
                         elif item_type == ItemType.SCOUT:
-                            ui.console.input("\n[dim]Press Enter to see preview...[/dim]")
                             self.show_scout_preview(player)
                             player.use_item(ItemType.SCOUT)
 
@@ -194,6 +193,10 @@ class GameEngine:
                         # Continue loop to allow more purchases
                     else:
                         ui.console.print(f"[red]Not enough points! Need {item.cost}, have {player.points}[/red]")
+                        ui.console.input("\n[dim]Press Enter to continue...[/dim]")
+                        ui.clear()
+                        ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
+                        ui.print_locations(self.location_manager, self.last_ai_search_location)
                         ui.console.print()
                         # Continue loop, don't exit
                 else:
@@ -352,6 +355,8 @@ class GameEngine:
         ui.console.print()
         ui.print_standings(self.players)
 
+        # Flush input buffer to prevent enter spam from skipping this prompt
+        ui.flush_input()
         ui.console.input("\n[dim]Press Enter to continue to next round...[/dim]")
 
         # Clear scout rolls for next round

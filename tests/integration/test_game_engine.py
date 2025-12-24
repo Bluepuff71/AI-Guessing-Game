@@ -82,9 +82,9 @@ class TestShopPhase:
         player = game_engine.players[0]
         player.points = 5
 
-        # Try to buy Lucky Charm (cost 9), then skip
+        # Try to buy Lucky Charm (cost 9), see error, continue, then skip
         import game.ui
-        inputs = iter(["1", ""])
+        inputs = iter(["1", "", ""])  # Try buy, press continue, then skip
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs))
 
         game_engine.shop_phase(player)

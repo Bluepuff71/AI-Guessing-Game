@@ -15,6 +15,23 @@ from game.items import ItemShop, ItemType
 console = Console()
 
 
+def flush_input():
+    """Flush any buffered keyboard input (prevents enter spam from skipping prompts)."""
+    if sys.platform == 'win32':
+        try:
+            import msvcrt
+            while msvcrt.kbhit():
+                msvcrt.getch()
+        except:
+            pass
+    else:
+        try:
+            import termios
+            termios.tcflush(sys.stdin, termios.TCIOFLUSH)
+        except:
+            pass
+
+
 def clear():
     """Clear the console."""
     # Use system command for proper clearing on Windows

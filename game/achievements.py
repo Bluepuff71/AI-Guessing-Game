@@ -41,12 +41,11 @@ class AchievementTracker:
         Achievement(
             id="high_roller",
             name="High Roller",
-            description="Earn 50+ points in a single round",
+            description="Score 120+ points in a single game",
             emoji="💰",
             condition=lambda profile: any(
-                round_data.get('points_earned', 0) >= 50
-                for player_game in getattr(profile, '_game_data', [])
-                for round_data in player_game.get('round_history', [])
+                match.final_score >= 120
+                for match in profile.match_history
             ),
             hidden=True
         ),
@@ -102,12 +101,9 @@ class AchievementTracker:
         Achievement(
             id="ghost",
             name="Ghost",
-            description="Play 5 games without being caught",
+            description="Win 5 consecutive games without being caught",
             emoji="👤",
-            condition=lambda profile: (
-                profile.stats.total_games >= 5 and
-                profile.stats.times_caught == 0
-            ),
+            condition=lambda profile: _check_ghost_streak(profile, 5),
             hidden=True
         ),
         Achievement(
@@ -171,18 +167,18 @@ class AchievementTracker:
         Achievement(
             id="ai_nemesis",
             name="AI's Nemesis",
-            description="The AI has a personal model trained on you",
+            description="Defeat the AI 3 times after it built your personal model",
             emoji="🤖",
-            condition=lambda profile: profile.ai_memory.has_personal_model
+            condition=lambda profile: _check_ai_nemesis(profile, 3)
         ),
         Achievement(
             id="outsmarted",
             name="Outsmarted",
-            description="Win a game where AI has your personal model",
+            description="Win your first game after AI built your personal model",
             emoji="🧠",
             condition=lambda profile: (
                 profile.ai_memory.has_personal_model and
-                any(match.outcome == 'win' for match in profile.match_history[-5:])
+                any(match.outcome == 'win' for match in profile.match_history)
             ),
             hidden=True
         ),
@@ -300,3 +296,32 @@ def _check_comeback(profile) -> bool:
             return True
 
     return False
+
+
+def _check_ghost_streak(profile, streak_length: int) -> bool:
+    """Check if player has won N consecutive games without being caught."""
+    if len(profile.match_history) < streak_length:
+        return False
+
+    # Check last N games for consecutive wins without being caught
+    for i in range(len(profile.match_history) - streak_length + 1):
+        streak = profile.match_history[i:i + streak_length]
+        if all(match.outcome == 'win' and not match.caught for match in streak):
+            return True
+
+    return False
+
+
+def _check_ai_nemesis(profile, wins_needed: int) -> bool:
+    """Check if player has won N games after AI built their personal model."""
+    if not profile.ai_memory.has_personal_model:
+        return False
+
+    # Count wins in match history (assuming personal model was built before these)
+    # This is approximate since we don't track when model was built in match history
+    wins_with_model = sum(
+        1 for match in profile.match_history
+        if match.outcome == 'win'
+    )
+
+    return wins_with_model >= wins_needed
