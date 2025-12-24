@@ -85,7 +85,7 @@ class GameEngine:
             ui.print_standings(self.players, player_choices)
 
             # Show locations (same for all players this round)
-            ui.print_locations(self.location_manager)
+            ui.print_locations(self.location_manager, self.last_ai_search_location)
 
             # Shop phase
             self.shop_phase(player)

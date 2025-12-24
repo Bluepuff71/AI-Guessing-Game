@@ -73,9 +73,14 @@ def print_standings(players: List[Player], player_choices: Dict[Player, Location
     console.print()
 
 
-def print_locations(location_manager: LocationManager):
+def print_locations(location_manager: LocationManager, previous_ai_location: Location = None):
     """Print available loot locations."""
-    console.print("[bold]AVAILABLE LOOT THIS ROUND:[/bold]\n")
+    console.print("[bold]AVAILABLE LOOT THIS ROUND:[/bold]")
+
+    if previous_ai_location:
+        console.print(f"[dim]Last round AI searched: {previous_ai_location.emoji} {previous_ai_location.name}[/dim]")
+
+    console.print()
 
     # Clean single-column list
     locations = location_manager.get_all()
