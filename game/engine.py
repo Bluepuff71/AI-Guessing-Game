@@ -1,6 +1,8 @@
 """Main game engine and loop."""
 import json
 import os
+import uuid
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from game.player import Player
 from game.locations import LocationManager, Location
@@ -9,13 +11,15 @@ from game import ui
 from game.config_loader import config
 from ai.predictor import AIPredictor
 from ai.features import generate_insights
+from game.profile_manager import ProfileManager, PlayerProfile
 
 
 class GameEngine:
     """Main game engine that runs LOOT RUN."""
 
-    def __init__(self, num_players: int):
+    def __init__(self, num_players: int, profiles: Optional[List[Optional[PlayerProfile]]] = None):
         self.num_players = num_players
+        self.profiles = profiles or []  # List of PlayerProfile objects (or None for guests)
         self.players: List[Player] = []
         self.location_manager = LocationManager()
         self.ai = AIPredictor(self.location_manager)
@@ -27,7 +31,7 @@ class GameEngine:
         self.last_ai_search_location: Optional[Location] = None  # Track previous round's AI search
 
     def setup_game(self):
-        """Initialize the game and get player names."""
+        """Initialize the game and create players from profiles."""
         ui.clear()
         ui.print_header("LOOT RUN")
 
@@ -48,12 +52,29 @@ class GameEngine:
             ui.console.print("[yellow]🤖 AI Status: Baseline AI (No ML model yet - will train after 2+ games)[/yellow]")
         ui.console.print()
 
-        # Get player names
-        for i in range(self.num_players):
-            name = ui.console.input(f"[bold green]Enter name for Player {i+1}:[/bold green] ").strip()
-            if not name:
-                name = f"Player {i+1}"
-            self.players.append(Player(i, name))
+        # Create players from profiles or prompt for names if no profiles
+        if self.profiles and len(self.profiles) == self.num_players:
+            # Use profiles
+            for i in range(self.num_players):
+                profile = self.profiles[i]
+                if profile:
+                    # Player with profile
+                    self.players.append(Player(i, profile.name, profile.profile_id))
+                    ui.console.print(f"[green]Player {i+1}: {profile.name}[/green] "
+                                   f"[dim]({profile.stats.wins}W-{profile.stats.losses}L)[/dim]")
+                else:
+                    # Guest player - need to ask for name
+                    name = ui.console.input(f"[bold green]Enter name for Guest Player {i+1}:[/bold green] ").strip()
+                    if not name:
+                        name = f"Player {i+1}"
+                    self.players.append(Player(i, name, None))
+        else:
+            # No profiles provided - prompt for names (legacy mode)
+            for i in range(self.num_players):
+                name = ui.console.input(f"[bold green]Enter name for Player {i+1}:[/bold green] ").strip()
+                if not name:
+                    name = f"Player {i+1}"
+                self.players.append(Player(i, name))
 
         ui.console.print()
         ui.console.input("[dim]Press Enter to start the game...[/dim]")
@@ -230,7 +251,22 @@ class GameEngine:
         if not insights:
             insights.append("No strong patterns detected yet")
 
-        ui.show_intel_report(player, threat_level, predictability, insights)
+        # Add AI Memory section if player has a profile
+        ai_memory = None
+        if hasattr(player, 'profile_id') and player.profile_id:
+            from game.profile_manager import ProfileManager
+            pm = ProfileManager()
+            profile = pm.load_profile(player.profile_id)
+            if profile:
+                ai_memory = {
+                    'favorite_location': profile.behavioral_stats.favorite_location,
+                    'risk_profile': profile.behavioral_stats.risk_profile,
+                    'catch_rate': profile.ai_memory.catch_rate,
+                    'has_personal_model': profile.ai_memory.has_personal_model,
+                    'total_games': profile.stats.total_games
+                }
+
+        ui.show_intel_report(player, threat_level, predictability, insights, ai_memory)
         ui.console.input("[dim]Press Enter to continue...[/dim]")
 
     def choose_location_phase(self, player: Player) -> Location:
@@ -381,19 +417,26 @@ class GameEngine:
         ui.console.input("[dim]Press Enter to return to main menu...[/dim]")
 
     def save_game_data(self):
-        """Save game data for ML training."""
+        """Save game data for ML training and update player profiles."""
         data_dir = "data"
         os.makedirs(data_dir, exist_ok=True)
 
+        # Generate unique game ID
+        game_id = str(uuid.uuid4())
+
         game_data = {
+            'game_id': game_id,
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'num_players': self.num_players,
             'num_rounds': self.round_num,
             'winner': self.winner.name if self.winner else 'AI',
+            'winner_profile_id': self.winner.profile_id if self.winner and hasattr(self.winner, 'profile_id') else None,
             'players': []
         }
 
         for player in self.players:
             player_data = {
+                'profile_id': player.profile_id if hasattr(player, 'profile_id') else None,
                 'name': player.name,
                 'final_points': player.points,
                 'alive': player.alive,
@@ -420,6 +463,9 @@ class GameEngine:
 
             ui.console.print(f"[dim]Game data saved ({len(history['games'])} total games played)[/dim]")
 
+            # Update player profiles if they have profile_ids
+            self._update_player_profiles(game_id)
+
             # Try to retrain ML model if enough games have been played
             self._try_retrain_model(len(history['games']))
 
@@ -434,3 +480,48 @@ class GameEngine:
         except Exception as e:
             # Silent fail if ML not available
             pass
+
+    def _update_player_profiles(self, game_id: str):
+        """Update player profiles after game completion."""
+        pm = ProfileManager()
+
+        for player in self.players:
+            # Skip players without profiles (guests)
+            if not hasattr(player, 'profile_id') or not player.profile_id:
+                continue
+
+            try:
+                # Determine outcome
+                if player == self.winner:
+                    outcome = 'win'
+                elif not player.alive:
+                    outcome = 'loss'
+                else:
+                    outcome = 'ai_win'  # Game ended but player didn't win
+
+                # Collect items used during game
+                items_used = [item.name for item in player.items]
+
+                # Update profile stats and check for achievements
+                newly_unlocked = pm.update_stats_after_game(
+                    player.profile_id,
+                    {
+                        'game_id': game_id,
+                        'outcome': outcome,
+                        'final_score': player.points,
+                        'caught': not player.alive,
+                        'rounds_played': self.round_num,
+                        'num_opponents': self.num_players - 1,
+                        'locations_chosen': player.choice_history,
+                        'items_used': items_used
+                    }
+                )
+
+                ui.console.print(f"[dim]Updated profile for {player.name}[/dim]")
+
+                # Display achievement notifications
+                for achievement in newly_unlocked:
+                    ui.print_achievement_notification(achievement.name, achievement.description)
+
+            except Exception as e:
+                ui.console.print(f"[dim red]Failed to update profile for {player.name}: {e}[/dim red]")

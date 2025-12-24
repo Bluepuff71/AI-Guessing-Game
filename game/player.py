@@ -7,9 +7,10 @@ from game.locations import Location
 class Player:
     """Represents a player in the game."""
 
-    def __init__(self, player_id: int, name: str):
+    def __init__(self, player_id: int, name: str, profile_id: Optional[str] = None):
         self.id = player_id
         self.name = name
+        self.profile_id = profile_id  # UUID of player's profile (None for guests)
         self.points = 0
         self.alive = True
         self.items: List[Item] = []

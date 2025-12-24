@@ -51,7 +51,17 @@ class AIPredictor:
         if len(player.choice_history) < 2:
             return self._simple_pattern_prediction(player)
 
-        # Try ML prediction if available
+        # Try per-player ML prediction if player has a profile
+        if hasattr(player, 'profile_id') and player.profile_id:
+            try:
+                player_prediction = self._player_ml_prediction(player, num_players_alive)
+                if player_prediction:
+                    return player_prediction
+            except Exception:
+                # Fall through to global model or baseline
+                pass
+
+        # Try global ML prediction if available
         if self.use_ml and self.ml_trainer:
             try:
                 return self._ml_prediction(player, num_players_alive)
@@ -155,6 +165,37 @@ class AIPredictor:
         features.append(float(num_items))
 
         return features
+
+    def _player_ml_prediction(self, player: Player, num_players_alive: int) -> Optional[Tuple[str, float, str]]:
+        """Per-player ML prediction using trained personal model."""
+        from ai.player_predictor import PlayerPredictor
+        from game.profile_manager import ProfileManager
+
+        predictor = PlayerPredictor(player.profile_id)
+
+        # Try to load model
+        if not predictor.load_model():
+            return None  # Model doesn't exist yet
+
+        # Extract features (same as global model)
+        features = self._extract_ml_features(player, num_players_alive)
+
+        # Get predictions from personal model
+        location_probs = predictor.predict(features)
+
+        # Find most likely location
+        best_location = max(location_probs.items(), key=lambda x: x[1])
+        location_name, confidence = best_location
+
+        # Generate PERSONALIZED reasoning
+        pm = ProfileManager()
+        profile = pm.load_profile(player.profile_id)
+        if profile and profile.behavioral_stats.favorite_location != "Unknown":
+            reasoning = f"I know YOUR style, {player.name}. You favor {profile.behavioral_stats.favorite_location}."
+        else:
+            reasoning = f"Based on your personal history, predicting {location_name}."
+
+        return (location_name, confidence, reasoning)
 
     def _generate_ml_reasoning(self, player: Player, predicted_location: str, confidence: float) -> str:
         """Generate reasoning for ML prediction."""
