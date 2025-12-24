@@ -3,6 +3,7 @@ import random
 from typing import List, Dict, Tuple, Any, Optional
 from game.player import Player
 from game.locations import Location, LocationManager
+from game.config_loader import config
 from ai.features import extract_features, calculate_predictability
 
 
@@ -97,8 +98,9 @@ class AIPredictor:
         features = []
 
         # Current state
+        win_threshold = config.get('game', 'win_threshold', default=100)
         features.append(player.points)  # current_score
-        features.append(max(0, 100 - player.points))  # points_to_win
+        features.append(max(0, win_threshold - player.points))  # points_to_win
         features.append(self.round_num)  # round_number
 
         # Historical behavior
@@ -163,7 +165,9 @@ class AIPredictor:
             reasons.append("ML model high confidence")
 
         # Add behavioral insights
-        if player.points >= 80:
+        win_threshold = config.get('game', 'win_threshold', default=100)
+        win_proximity_threshold = int(win_threshold * 0.8)
+        if player.points >= win_proximity_threshold:
             reasons.append(f"{player.points} points - win threat")
 
         behavior = player.get_behavior_summary()
@@ -244,8 +248,10 @@ class AIPredictor:
             elif features['high_value_preference'] < 0.4 and location_value < 15:
                 score += 5
 
-        # Factor 3: Win threat (players near 100 likely to go high-value)
-        if features['points_to_win'] <= 20 and location_value >= 20:
+        # Factor 3: Win threat (players near win threshold likely to go high-value)
+        win_threshold = config.get('game', 'win_threshold', default=100)
+        close_to_win_margin = int(win_threshold * 0.2)
+        if features['points_to_win'] <= close_to_win_margin and location_value >= 20:
             score += 8  # High priority on high-value when close to winning
 
         # Factor 4: Recent trend
@@ -354,12 +360,15 @@ class AIPredictor:
 
         Returns: 0-1 scale, where 1 is highest threat
         """
-        # Primary factor: proximity to 100 points
-        points_threat = player.points / 100.0
+        win_threshold = config.get('game', 'win_threshold', default=100)
+        win_proximity_threshold = int(win_threshold * 0.8)
+
+        # Primary factor: proximity to win threshold
+        points_threat = player.points / win_threshold
 
         # Exponential scaling for players close to winning
-        if player.points >= 80:
-            points_threat = 0.8 + (player.points - 80) / 100.0  # 0.8-1.0 range
+        if player.points >= win_proximity_threshold:
+            points_threat = 0.8 + (player.points - win_proximity_threshold) / win_threshold  # 0.8-1.0 range
 
         # Secondary factor: has Lucky Charm (could double points)
         has_lucky_charm = any(item.name == "Lucky Charm" and not item.consumed
@@ -368,7 +377,8 @@ class AIPredictor:
         if has_lucky_charm:
             # If they have lucky charm and could potentially win this round
             # (assuming they go for Bank Vault = 35 pts * 2 = 70 pts)
-            if player.points >= 30:  # 30 + 70 = 100
+            lucky_charm_win_threshold = int(win_threshold * 0.3)
+            if player.points >= lucky_charm_win_threshold:
                 points_threat = min(1.0, points_threat + 0.3)
 
         # Tertiary factor: predictability (easier to catch)

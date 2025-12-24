@@ -1,21 +1,23 @@
 """Location definitions and point value management."""
 import random
 from typing import Dict, List
+from game.config_loader import config
 
 
 class Location:
     """Represents a lootable location."""
 
-    def __init__(self, name: str, emoji: str, base_points: int):
+    def __init__(self, name: str, emoji: str, base_points: int, variance: float = 0.2):
         self.name = name
         self.emoji = emoji
         self.base_points = base_points
         self.current_points = base_points
+        self.variance = variance
 
     def randomize_points(self) -> int:
-        """Randomize point value ±20% from base."""
-        variance = int(self.base_points * 0.2)
-        self.current_points = self.base_points + random.randint(-variance, variance)
+        """Randomize point value based on variance % from base."""
+        variance_amount = int(self.base_points * self.variance)
+        self.current_points = self.base_points + random.randint(-variance_amount, variance_amount)
         return self.current_points
 
     def __str__(self) -> str:
@@ -26,16 +28,18 @@ class LocationManager:
     """Manages all game locations."""
 
     def __init__(self):
-        self.locations: List[Location] = [
-            Location("Gas Station", "🏪", 5),
-            Location("Pharmacy", "💊", 10),
-            Location("Jewelry Store", "💎", 20),
-            Location("Bank Vault", "🏦", 35),
-            Location("Warehouse", "📦", 8),
-            Location("Pawn Shop", "🔨", 12),
-            Location("Electronics Store", "💻", 15),
-            Location("Convenience Store", "🏬", 7),
-        ]
+        # Load from config
+        locations_data = config.get_locations()
+        variance = config.get('locations', 'point_variance', default=0.2)
+
+        self.locations: List[Location] = []
+        for loc_data in locations_data:
+            self.locations.append(Location(
+                name=loc_data['name'],
+                emoji=loc_data['emoji'],
+                base_points=loc_data['base_points'],
+                variance=variance
+            ))
 
     def randomize_all_points(self):
         """Randomize all location point values for a new round."""

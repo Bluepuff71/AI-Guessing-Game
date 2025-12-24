@@ -6,6 +6,7 @@ from game.player import Player
 from game.locations import LocationManager, Location
 from game.items import ItemShop, ItemType, Item
 from game import ui
+from game.config_loader import config
 from ai.predictor import AIPredictor
 from ai.features import generate_insights
 
@@ -21,6 +22,7 @@ class GameEngine:
         self.round_num = 0
         self.game_over = False
         self.winner: Optional[Player] = None
+        self.win_threshold = config.get('game', 'win_threshold', default=100)
 
     def setup_game(self):
         """Initialize the game and get player names."""
@@ -28,7 +30,7 @@ class GameEngine:
         ui.print_header("LOOT RUN")
 
         ui.console.print("[bold]Welcome to LOOT RUN![/bold]")
-        ui.console.print("Compete against other players to reach 100 points first.")
+        ui.console.print(f"Compete against other players to reach {self.win_threshold} points first.")
         ui.console.print("But watch out - the AI is learning your patterns...")
         ui.console.print()
 
@@ -125,6 +127,11 @@ class GameEngine:
         """Handle shopping for a player."""
         ui.console.print(f"Your points: [yellow]{player.points}[/yellow]")
 
+        # Skip shop if player has no points
+        if player.points == 0:
+            ui.console.print("[dim]You have no points to spend. Skipping shop.[/dim]\n")
+            return
+
         active_items = player.get_active_items()
         if active_items:
             items_str = ", ".join(item.name for item in active_items)
@@ -136,28 +143,32 @@ class GameEngine:
         ui.print_shop()
 
         # Ask if player wants to buy
-        choice = ui.get_player_input("Buy item? (1-4 or skip): ", None)
+        choice = ui.get_player_input("Buy item? (1-4 or Enter to skip): ", None)
 
-        if choice.lower() != "skip":
-            try:
-                item_num = int(choice)
-                if 1 <= item_num <= 4:
-                    item_types = list(ItemType)
-                    item_type = item_types[item_num - 1]
-                    item = ItemShop.get_item(item_type)
+        # Skip if empty or "skip"
+        if choice.strip() == "" or choice.lower() == "skip":
+            return
 
-                    if player.buy_item(item):
-                        ui.console.print(f"[green]✓ Bought {item.name} for {item.cost} pts[/green]")
-                        ui.console.print(f"[yellow]Points remaining: {player.points}[/yellow]")
+        # Try to purchase item
+        try:
+            item_num = int(choice)
+            if 1 <= item_num <= 4:
+                item_types = list(ItemType)
+                item_type = item_types[item_num - 1]
+                item = ItemShop.get_item(item_type)
 
-                        # If Intel Report, show it immediately
-                        if item_type == ItemType.INTEL_REPORT:
-                            self.show_intel_report(player)
-                            item.consumed = True  # Intel Report is consumed immediately
-                    else:
-                        ui.console.print(f"[red]Not enough points! Need {item.cost}, have {player.points}[/red]")
-            except (ValueError, IndexError):
-                ui.console.print("[red]Invalid choice[/red]")
+                if player.buy_item(item):
+                    ui.console.print(f"[green]✓ Bought {item.name} for {item.cost} pts[/green]")
+                    ui.console.print(f"[yellow]Points remaining: {player.points}[/yellow]")
+
+                    # If Intel Report, show it immediately
+                    if item_type == ItemType.INTEL_REPORT:
+                        self.show_intel_report(player)
+                        item.consumed = True  # Intel Report is consumed immediately
+                else:
+                    ui.console.print(f"[red]Not enough points! Need {item.cost}, have {player.points}[/red]")
+        except (ValueError, IndexError):
+            ui.console.print("[red]Invalid choice[/red]")
 
         ui.console.print()
 
@@ -277,7 +288,7 @@ class GameEngine:
 
         # Check for score victory
         for player in alive_players:
-            if player.points >= 100:
+            if player.points >= self.win_threshold:
                 self.game_over = True
                 self.winner = player
                 return

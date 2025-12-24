@@ -2,6 +2,7 @@
 from typing import Dict, Any, List
 from game.player import Player
 from game.locations import LocationManager
+from game.config_loader import config
 
 
 def extract_features(player: Player, round_num: int, num_players_alive: int,
@@ -12,6 +13,7 @@ def extract_features(player: Player, round_num: int, num_players_alive: int,
     Returns a dictionary of features that describe player behavior and context.
     """
     features = {}
+    win_threshold = config.get('game', 'win_threshold', default=100)
 
     # Current state features
     features['current_score'] = player.points
@@ -19,8 +21,9 @@ def extract_features(player: Player, round_num: int, num_players_alive: int,
     features['players_alive'] = num_players_alive
 
     # Score context
-    features['points_to_win'] = max(0, 100 - player.points)
-    features['win_threat'] = 1.0 if player.points >= 80 else player.points / 100.0
+    features['points_to_win'] = max(0, win_threshold - player.points)
+    win_proximity_threshold = int(win_threshold * 0.8)  # 80% of win threshold
+    features['win_threat'] = 1.0 if player.points >= win_proximity_threshold else player.points / win_threshold
 
     # Get behavior summary
     behavior = player.get_behavior_summary()
@@ -147,7 +150,10 @@ def generate_insights(player: Player) -> Dict[str, Any]:
             insights['tips'].append(f"Avoid over-relying on {sorted_locs[0][0]}")
 
     # Check for win-rush behavior
-    if player.points >= 80:
+    win_threshold = config.get('game', 'win_threshold', default=100)
+    win_proximity_threshold = int(win_threshold * 0.8)  # 80% of win threshold
+
+    if player.points >= win_proximity_threshold:
         late_game_choices = player.round_history[-3:] if len(player.round_history) >= 3 else player.round_history
         late_game_avg = sum(r['location_value'] for r in late_game_choices) / len(late_game_choices) if late_game_choices else 0
 
@@ -155,6 +161,6 @@ def generate_insights(player: Player) -> Dict[str, Any]:
             insights['patterns'].append(
                 "Win-rush detected: Became aggressive when close to winning"
             )
-            insights['tips'].append("Consider safer choices when close to 100 points")
+            insights['tips'].append(f"Consider safer choices when close to {win_threshold} points")
 
     return insights

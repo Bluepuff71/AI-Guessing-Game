@@ -1,0 +1,17 @@
+{
+  "game": {
+    "win_threshold": 100,
+    "min_players": 2,
+    "max_players": 6
+  },
+  "locations": {
+    "point_variance": 0.2
+  },
+  "ai": {
+    "early_game_rounds": 3,
+    "mid_game_rounds": 6,
+    "ml_min_games": 2,
+    "ml_retrain_frequency": 5,
+    "ml_min_samples": 20
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "locations": [
+    {
+      "name": "Gas Station",
+      "emoji": "🏪",
+      "base_points": 5
+    },
+    {
+      "name": "Pharmacy",
+      "emoji": "💊",
+      "base_points": 10
+    },
+    {
+      "name": "Jewelry Store",
+      "emoji": "💎",
+      "base_points": 20
+    },
+    {
+      "name": "Bank Vault",
+      "emoji": "🏦",
+      "base_points": 35
+    },
+    {
+      "name": "Warehouse",
+      "emoji": "📦",
+      "base_points": 8
+    },
+    {
+      "name": "Pawn Shop",
+      "emoji": "🔨",
+      "base_points": 12
+    },
+    {
+      "name": "Electronics Store",
+      "emoji": "💻",
+      "base_points": 15
+    },
+    {
+      "name": "Convenience Store",
+      "emoji": "🏬",
+      "base_points": 7
+    }
+  ]
+}

@@ -1478,6 +1478,93 @@
           ]
         }
       ]
+    },
+    {
+      "num_players": 2,
+      "num_rounds": 3,
+      "winner": "Tom",
+      "players": [
+        {
+          "name": "Emery",
+          "final_points": 30,
+          "alive": false,
+          "rounds_survived": 3,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Bank Vault",
+              "location_value": 32,
+              "points_before": 0,
+              "points_earned": 32,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 2,
+              "location": "Jewelry Store",
+              "location_value": 18,
+              "points_before": 32,
+              "points_earned": 18,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 3,
+              "location": "Electronics Store",
+              "location_value": 18,
+              "points_before": 30,
+              "points_earned": 0,
+              "caught": true,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Bank Vault",
+            "Jewelry Store",
+            "Electronics Store"
+          ]
+        },
+        {
+          "name": "Tom",
+          "final_points": 55,
+          "alive": true,
+          "rounds_survived": 3,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Electronics Store",
+              "location_value": 17,
+              "points_before": 0,
+              "points_earned": 17,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 2,
+              "location": "Bank Vault",
+              "location_value": 30,
+              "points_before": 17,
+              "points_earned": 30,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 3,
+              "location": "Bank Vault",
+              "location_value": 28,
+              "points_before": 27,
+              "points_earned": 28,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Electronics Store",
+            "Bank Vault",
+            "Bank Vault"
+          ]
+        }
+      ]
     }
   ]
 }

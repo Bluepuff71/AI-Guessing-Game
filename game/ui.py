@@ -1,4 +1,6 @@
 """Terminal UI helpers using rich library."""
+import sys
+import os
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -15,6 +17,12 @@ console = Console()
 
 def clear():
     """Clear the console."""
+    # Use system command for proper clearing on Windows
+    if sys.platform == 'win32':
+        os.system('cls')
+    else:
+        os.system('clear')
+    # Fallback to Rich's clear (though it doesn't work as well on Windows)
     console.clear()
 
 
