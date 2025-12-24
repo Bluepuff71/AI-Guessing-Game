@@ -35,9 +35,14 @@ class AIPredictor:
             self.use_ml = False
             self.ml_trainer = None
 
-    def predict_player_location(self, player: Player, num_players_alive: int) -> Tuple[str, float, str]:
+    def predict_player_location(self, player: Player, num_players_alive: int, event_manager=None) -> Tuple[str, float, str]:
         """
         Predict where a player will go.
+
+        Args:
+            player: The player to predict
+            num_players_alive: Number of alive players
+            event_manager: Optional EventManager to consider events
 
         Returns: (location_name, confidence, reasoning)
         """
@@ -45,37 +50,93 @@ class AIPredictor:
 
         # Early game (rounds 1-3): Always use random (learning phase)
         if self.round_num <= 3:
-            return self._random_prediction(player)
-
+            prediction = self._random_prediction(player)
         # Not enough history yet
-        if len(player.choice_history) < 2:
-            return self._simple_pattern_prediction(player)
+        elif len(player.choice_history) < 2:
+            prediction = self._simple_pattern_prediction(player)
+        else:
+            # Try per-player ML prediction if player has a profile
+            prediction = None
+            if hasattr(player, 'profile_id') and player.profile_id:
+                try:
+                    player_prediction = self._player_ml_prediction(player, num_players_alive)
+                    if player_prediction:
+                        prediction = player_prediction
+                except Exception:
+                    # Fall through to global model or baseline
+                    pass
 
-        # Try per-player ML prediction if player has a profile
-        if hasattr(player, 'profile_id') and player.profile_id:
-            try:
-                player_prediction = self._player_ml_prediction(player, num_players_alive)
-                if player_prediction:
-                    return player_prediction
-            except Exception:
-                # Fall through to global model or baseline
-                pass
+            # Try global ML prediction if available
+            if not prediction and self.use_ml and self.ml_trainer:
+                try:
+                    prediction = self._ml_prediction(player, num_players_alive)
+                except Exception as e:
+                    # Fall back to baseline if ML fails
+                    pass
 
-        # Try global ML prediction if available
-        if self.use_ml and self.ml_trainer:
-            try:
-                return self._ml_prediction(player, num_players_alive)
-            except Exception as e:
-                # Fall back to baseline if ML fails
-                pass
+            # Fallback: use baseline AI
+            if not prediction:
+                # Mid game (rounds 4-6): Simple pattern matching
+                if self.round_num <= 6:
+                    prediction = self._simple_pattern_prediction(player)
+                else:
+                    # Late game (rounds 7+): Advanced prediction
+                    prediction = self._advanced_prediction(player, num_players_alive)
 
-        # Fallback: use baseline AI
-        # Mid game (rounds 4-6): Simple pattern matching
-        if self.round_num <= 6:
-            return self._simple_pattern_prediction(player)
+        # Adjust prediction based on events
+        if event_manager:
+            prediction = self._adjust_for_events(prediction, event_manager, player)
 
-        # Late game (rounds 7+): Advanced prediction
-        return self._advanced_prediction(player, num_players_alive)
+        return prediction
+
+    def _adjust_for_events(self, prediction: Tuple[str, float, str], event_manager, player: Player) -> Tuple[str, float, str]:
+        """
+        Adjust AI prediction confidence and reasoning based on active events.
+
+        Args:
+            prediction: Original (location_name, confidence, reasoning) tuple
+            event_manager: EventManager with active events
+            player: The player being predicted
+
+        Returns: Adjusted (location_name, confidence, reasoning) tuple
+        """
+        location_name, confidence, reasoning = prediction
+
+        # Find the location object
+        predicted_location = self.location_manager.get_location_by_name(location_name)
+        if not predicted_location:
+            return prediction
+
+        # Check for active event at predicted location
+        event = event_manager.get_location_event(predicted_location)
+        if not event:
+            return prediction
+
+        # Adjust based on event type
+        if event.point_modifier:
+            # Positive point modifiers make location more attractive
+            # Test if it increases points
+            test_points = event.point_modifier(10)
+            if test_points > 10:
+                # Good event - player more likely to go
+                confidence = min(confidence * 1.3, 0.95)
+                reasoning += f" The {event.name} makes it tempting."
+            elif test_points < 10:
+                # Bad event - player less likely to go
+                confidence = confidence * 0.7
+                reasoning += f" The {event.name} might deter them."
+
+        if event.special_effect == "immunity":
+            # Immunity makes location very attractive (safe from capture)
+            confidence = min(confidence * 1.5, 0.95)
+            reasoning += f" The {event.name} offers protection."
+
+        elif event.special_effect == "guaranteed_catch":
+            # Guaranteed catch should scare players away
+            confidence = confidence * 0.3
+            reasoning += f" The {event.name} should scare them off."
+
+        return (location_name, confidence, reasoning)
 
     def _random_prediction(self, player: Player) -> Tuple[str, float, str]:
         """Random prediction for early game (AI is still learning)."""
@@ -353,9 +414,13 @@ class AIPredictor:
         # Prioritize most important reasons (max 2-3)
         return ", ".join(reasons[:3]).capitalize()
 
-    def decide_search_location(self, players: List[Player]) -> Tuple[Location, Dict[Player, Tuple], str]:
+    def decide_search_location(self, players: List[Player], event_manager=None) -> Tuple[Location, Dict[Player, Tuple], str]:
         """
         Decide which location to search based on all player predictions.
+
+        Args:
+            players: List of all players
+            event_manager: Optional EventManager to consider events in decision
 
         Returns: (location_to_search, {player: (predicted_loc, confidence, reasoning)}, search_reasoning)
         """
@@ -369,7 +434,7 @@ class AIPredictor:
         # Get predictions for all players
         predictions = {}
         for player in alive_players:
-            pred = self.predict_player_location(player, num_alive)
+            pred = self.predict_player_location(player, num_alive, event_manager=event_manager)
             predictions[player] = pred
 
         # Calculate expected impact for each location
@@ -395,6 +460,21 @@ class AIPredictor:
 
             location_impacts[location.name] = impact
             impact_details[location.name] = contributors
+
+        # Adjust impacts based on events
+        if event_manager:
+            for location in self.location_manager.get_all():
+                event = event_manager.get_location_event(location)
+                if event:
+                    base_impact = location_impacts[location.name]
+
+                    # Boost guaranteed catch locations (easy target)
+                    if event.special_effect == "guaranteed_catch":
+                        location_impacts[location.name] = base_impact * 2.0
+
+                    # Reduce immunity locations (can't catch players there)
+                    elif event.special_effect == "immunity":
+                        location_impacts[location.name] = base_impact * 0.2
 
         # Search location with highest expected impact
         best_location_name = max(location_impacts.items(), key=lambda x: x[1])[0]

@@ -1670,6 +1670,314 @@
           ]
         }
       ]
+    },
+    {
+      "game_id": "4e593b58-3f51-4f5b-8b24-031088212fe1",
+      "timestamp": "2025-12-24T22:52:53.690841+00:00",
+      "num_players": 2,
+      "num_rounds": 7,
+      "winner": "Emery",
+      "winner_profile_id": "aea93c24-8e24-49b0-8450-14f8802b2657",
+      "players": [
+        {
+          "profile_id": "aea93c24-8e24-49b0-8450-14f8802b2657",
+          "name": "Emery",
+          "final_points": 107,
+          "alive": true,
+          "rounds_survived": 7,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Jewelry Store",
+              "location_value": 23,
+              "points_before": 0,
+              "points_earned": 23,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 2,
+              "location": "Casino Vault",
+              "location_value": 24,
+              "points_before": 8,
+              "points_earned": 27,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 3,
+              "location": "Pawn Shop",
+              "location_value": 10,
+              "points_before": 35,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 4,
+              "location": "Jewelry Store",
+              "location_value": 17,
+              "points_before": 36,
+              "points_earned": 19,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 5,
+              "location": "Casino Vault",
+              "location_value": 29,
+              "points_before": 55,
+              "points_earned": 29,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 6,
+              "location": "Jewelry Store",
+              "location_value": 21,
+              "points_before": 75,
+              "points_earned": 24,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 7,
+              "location": "Pawn Shop",
+              "location_value": 8,
+              "points_before": 99,
+              "points_earned": 8,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Jewelry Store",
+            "Casino Vault",
+            "Pawn Shop",
+            "Jewelry Store",
+            "Casino Vault",
+            "Jewelry Store",
+            "Pawn Shop"
+          ]
+        },
+        {
+          "profile_id": "f15cc5c8-d4f7-48e9-b9b1-3d98e615d377",
+          "name": "Tom",
+          "final_points": 40,
+          "alive": false,
+          "rounds_survived": 5,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Jewelry Store",
+              "location_value": 16,
+              "points_before": 0,
+              "points_earned": 16,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 2,
+              "location": "Casino Vault",
+              "location_value": 10,
+              "points_before": 16,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 3,
+              "location": "Corner Store",
+              "location_value": 4,
+              "points_before": 26,
+              "points_earned": 4,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 4,
+              "location": "Pawn Shop",
+              "location_value": 10,
+              "points_before": 30,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            },
+            {
+              "round": 5,
+              "location": "Bank Heist",
+              "location_value": 0,
+              "points_before": 40,
+              "points_earned": 0,
+              "caught": true,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Jewelry Store",
+            "Casino Vault",
+            "Corner Store",
+            "Pawn Shop",
+            "Bank Heist"
+          ]
+        }
+      ]
+    },
+    {
+      "game_id": "bcbc7cb7-cfe1-4f69-95bf-b3ee33741916",
+      "timestamp": "2025-12-24T23:12:41.598050+00:00",
+      "num_players": 2,
+      "num_rounds": 0,
+      "winner": "AI",
+      "winner_profile_id": null,
+      "players": [
+        {
+          "profile_id": null,
+          "name": "Alice",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        },
+        {
+          "profile_id": null,
+          "name": "Bob",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        }
+      ]
+    },
+    {
+      "game_id": "3e4adf95-6493-454f-9d0a-6d7cbdcfaef8",
+      "timestamp": "2025-12-24T23:14:05.221700+00:00",
+      "num_players": 2,
+      "num_rounds": 0,
+      "winner": "AI",
+      "winner_profile_id": null,
+      "players": [
+        {
+          "profile_id": null,
+          "name": "Alice",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        },
+        {
+          "profile_id": null,
+          "name": "Bob",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        }
+      ]
+    },
+    {
+      "game_id": "c9bbb42f-42eb-48f5-bb6d-bb0d6cb73928",
+      "timestamp": "2025-12-24T23:16:22.520404+00:00",
+      "num_players": 2,
+      "num_rounds": 0,
+      "winner": "AI",
+      "winner_profile_id": null,
+      "players": [
+        {
+          "profile_id": null,
+          "name": "Alice",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        },
+        {
+          "profile_id": null,
+          "name": "Bob",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        }
+      ]
     }
   ]
 }

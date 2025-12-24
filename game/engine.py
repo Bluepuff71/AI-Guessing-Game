@@ -12,6 +12,7 @@ from game.config_loader import config
 from ai.predictor import AIPredictor
 from ai.features import generate_insights
 from game.profile_manager import ProfileManager, PlayerProfile
+from game.events import EventManager
 
 
 class GameEngine:
@@ -23,6 +24,7 @@ class GameEngine:
         self.players: List[Player] = []
         self.location_manager = LocationManager()
         self.ai = AIPredictor(self.location_manager)
+        self.event_manager = EventManager()
         self.round_num = 0
         self.game_over = False
         self.winner: Optional[Player] = None
@@ -96,6 +98,30 @@ class GameEngine:
         # Each player's turn to shop and choose location
         alive_players = [p for p in self.players if p.alive]
 
+        # Generate events based on current game state
+        game_state = {
+            'round_num': self.round_num,
+            'max_player_score': max((p.points for p in alive_players), default=0),
+            'catches_last_3_rounds': self._count_recent_catches()
+        }
+        newly_spawned = self.event_manager.generate_events(
+            game_state,
+            self.location_manager.get_all()
+        )
+
+        # Show newly spawned events
+        if newly_spawned:
+            ui.clear()
+            ui.print_header(f"ROUND {self.round_num}")
+            ui.console.print("\n[bold cyan]🎲 NEW EVENT![/bold cyan]\n")
+            for event in newly_spawned:
+                ui.console.print(
+                    f"  {event.emoji} [bold]{event.name}[/bold] at {event.affected_location.name}\n"
+                    f"  [dim]{event.description} ({event.rounds_remaining} round{'s' if event.rounds_remaining > 1 else ''} remaining)[/dim]"
+                )
+            ui.console.print()
+            ui.console.input("[dim]Press Enter to continue...[/dim]")
+
         for player in alive_players:
             # Clear console and show fresh context for this player
             ui.clear()
@@ -105,7 +131,7 @@ class GameEngine:
             ui.print_standings(self.players, player_choices)
 
             # Show locations (same for all players this round)
-            ui.print_locations(self.location_manager, self.last_ai_search_location)
+            ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager)
 
             # Shop phase
             self.shop_phase(player)
@@ -121,8 +147,11 @@ class GameEngine:
         ui.clear()
         ui.show_ai_thinking()
 
-        # AI decides where to search
-        search_location, predictions, ai_reasoning = self.ai.decide_search_location(self.players)
+        # AI decides where to search (with event awareness)
+        search_location, predictions, ai_reasoning = self.ai.decide_search_location(
+            self.players,
+            event_manager=self.event_manager
+        )
 
         # Reveal and resolution
         self.reveal_and_resolve_phase(player_choices, search_location, predictions, ai_reasoning)
@@ -187,7 +216,7 @@ class GameEngine:
                         ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
 
                         # Show locations so player has context
-                        ui.print_locations(self.location_manager, self.last_ai_search_location)
+                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager)
 
                         ui.console.print()
                         # Continue loop to allow more purchases
@@ -196,7 +225,7 @@ class GameEngine:
                         ui.console.input("\n[dim]Press Enter to continue...[/dim]")
                         ui.clear()
                         ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
-                        ui.print_locations(self.location_manager, self.last_ai_search_location)
+                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager)
                         ui.console.print()
                         # Continue loop, don't exit
                 else:
@@ -307,7 +336,26 @@ class GameEngine:
         for player in [p for p in self.players if p.alive]:
             chosen_location = player_choices[player]
 
-            if chosen_location.name == search_location.name:
+            # Check for event effects
+            special_effect = self.event_manager.get_special_effect(chosen_location)
+
+            # Determine if player is caught
+            caught = (chosen_location.name == search_location.name)
+
+            # Check for guaranteed catch event
+            if special_effect == "guaranteed_catch" and not caught:
+                # Small chance of being caught even if AI didn't search here
+                import random
+                if random.random() < 0.3:  # 30% chance
+                    caught = True
+                    ui.console.print(f"\n[red]⚠️ Silent Alarm! {player.name} was caught![/red]")
+
+            # Check for immunity event
+            if special_effect == "immunity" and caught:
+                caught = False
+                ui.console.print(f"\n[green]🛡️ Insurance Active! {player.name} is protected from capture![/green]")
+
+            if caught:
                 # Player is eliminated
                 ui.print_player_caught(player, shield_saved=False)
                 player.alive = False
@@ -334,7 +382,19 @@ class GameEngine:
                 else:
                     base_roll = chosen_location.roll_points()
 
-                points_earned = base_roll
+                # Apply event point modifiers
+                points_after_event = self.event_manager.apply_point_modifier(chosen_location, base_roll)
+
+                # Show event effect if points were modified
+                if points_after_event != base_roll:
+                    event = self.event_manager.get_location_event(chosen_location)
+                    if event:
+                        ui.console.print(
+                            f"  {event.emoji} [cyan]{event.name}:[/cyan] "
+                            f"{base_roll} → {points_after_event} points"
+                        )
+
+                points_earned = points_after_event
                 lucky_charm_multiplier = 1.0
                 if use_lucky_charm:
                     # Get Lucky Charm item to access its multiplier
@@ -358,6 +418,16 @@ class GameEngine:
         # Flush input buffer to prevent enter spam from skipping this prompt
         ui.flush_input()
         ui.console.input("\n[dim]Press Enter to continue to next round...[/dim]")
+
+        # Tick events (decrease duration, remove expired)
+        expired_events = self.event_manager.tick_events()
+        if expired_events:
+            ui.console.print("\n[dim]Events ended:[/dim]")
+            for event in expired_events:
+                ui.console.print(
+                    f"  [dim]{event.emoji} {event.name} at {event.affected_location.name}[/dim]"
+                )
+            ui.console.print()
 
         # Clear scout rolls for next round
         self.scout_rolls.clear()
@@ -530,3 +600,20 @@ class GameEngine:
 
             except Exception as e:
                 ui.console.print(f"[dim red]Failed to update profile for {player.name}: {e}[/dim red]")
+
+    def _count_recent_catches(self) -> int:
+        """
+        Count total catches in last 3 rounds across all players.
+
+        Returns:
+            Number of catches in the last 3 rounds
+        """
+        count = 0
+        for player in self.players:
+            if len(player.choice_history) >= 3:
+                # choice_history contains tuples: (location, round, success, ...)
+                recent = player.choice_history[-3:]
+                for choice in recent:
+                    if len(choice) >= 3 and not choice[2]:  # choice[2] is success (False = caught)
+                        count += 1
+        return count

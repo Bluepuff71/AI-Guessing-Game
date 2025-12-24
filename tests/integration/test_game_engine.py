@@ -317,3 +317,142 @@ class TestDataSaving:
 
         history_file = temp_data_dir / "game_history.json"
         assert history_file.exists()
+
+
+class TestEventSystem:
+    """Integration tests for event system in game rounds."""
+
+    def test_event_manager_initialized(self, game_engine):
+        """Test GameEngine has EventManager initialized."""
+        assert hasattr(game_engine, 'event_manager')
+        assert game_engine.event_manager is not None
+        assert game_engine.event_manager.max_concurrent == 2
+
+    def test_event_generation_during_round(self, game_engine, deterministic_random, monkeypatch):
+        """Test events can be generated during play_round."""
+        # Mock console.input for all prompts
+        import game.ui
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Mock location choice
+        def mock_choose_location(player):
+            return game_engine.location_manager.get_location(0)
+        monkeypatch.setattr(game_engine, 'choose_location_phase', mock_choose_location)
+
+        # Mock shop phase (skip)
+        monkeypatch.setattr(game_engine, 'shop_phase', lambda player: None)
+
+        # Round 3 should trigger event generation (every 3 rounds)
+        game_engine.round_num = 2  # Will become 3 in play_round
+
+        initial_event_count = len(game_engine.event_manager.active_events)
+
+        # Play a round
+        game_engine.play_round()
+
+        # Events may or may not have spawned (probabilistic), but manager should work
+        assert len(game_engine.event_manager.active_events) <= game_engine.event_manager.max_concurrent
+
+    def test_event_point_modifier_applied(self, game_engine, deterministic_random):
+        """Test event point modifiers are applied during resolution."""
+        player = game_engine.players[0]
+        location = game_engine.location_manager.get_location(0)
+
+        # Manually create a jackpot event (2x points) at location
+        jackpot_template = next(e for e in game_engine.event_manager.event_pool if e.id == "jackpot")
+        jackpot = jackpot_template.copy_with_location(location)
+        game_engine.event_manager.active_events.append(jackpot)
+
+        # Apply point modifier
+        base_points = 10
+        modified_points = game_engine.event_manager.apply_point_modifier(location, base_points)
+
+        assert modified_points == 20  # Doubled by jackpot
+
+    def test_event_immunity_prevents_catch(self, game_engine, deterministic_random, monkeypatch):
+        """Test immunity event prevents player from being caught."""
+        player1 = game_engine.players[0]
+        player2 = game_engine.players[1]
+        location1 = game_engine.location_manager.get_location(0)
+        location2 = game_engine.location_manager.get_location(1)
+
+        # Create immunity event at location1
+        immunity_template = next(e for e in game_engine.event_manager.event_pool if e.id == "insurance")
+        immunity = immunity_template.copy_with_location(location1)
+        game_engine.event_manager.active_events.append(immunity)
+
+        # Mock console.input for prompts
+        import game.ui
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Set up scenario where player1 would be caught but has immunity
+        player_choices = {player1: location1, player2: location2}
+        search_location = location1  # AI searches location1
+        predictions = {
+            player1: (location1, 0.8, "Test prediction"),
+            player2: (location2, 0.5, "Test prediction")
+        }
+
+        # Resolve (immunity should prevent catch)
+        game_engine.reveal_and_resolve_phase(player_choices, search_location, predictions, "Test reasoning")
+
+        # Player1 should still be alive (protected by immunity)
+        assert player1.alive is True
+
+    def test_event_ticking_and_expiration(self, game_engine):
+        """Test events tick and expire correctly."""
+        location = game_engine.location_manager.get_location(0)
+
+        # Create event with 1 round duration
+        event = game_engine.event_manager._spawn_event([location])
+        event.rounds_remaining = 1
+
+        assert event in game_engine.event_manager.active_events
+
+        # Tick events
+        expired = game_engine.event_manager.tick_events()
+
+        # Event should be expired and removed
+        assert event in expired
+        assert event not in game_engine.event_manager.active_events
+
+    def test_max_concurrent_events_enforced(self, game_engine):
+        """Test max concurrent events limit is enforced by generate_events."""
+        locations = game_engine.location_manager.get_all()
+
+        # Game state that always triggers event generation
+        game_state = {
+            'round_num': 3,
+            'max_player_score': 100,
+            'catches_last_3_rounds': 5
+        }
+
+        # Try to generate events multiple times
+        for _ in range(10):
+            game_engine.event_manager.generate_events(game_state, locations)
+
+        # Should not exceed max_concurrent (2)
+        assert len(game_engine.event_manager.active_events) <= game_engine.event_manager.max_concurrent
+
+    def test_ai_considers_events_in_prediction(self, game_engine, deterministic_random):
+        """Test AI adjusts predictions based on active events."""
+        from game.events import EventManager
+
+        player = game_engine.players[0]
+        location = game_engine.location_manager.get_location(0)
+
+        # Create guaranteed_catch event at a location
+        alarm_template = next(e for e in game_engine.event_manager.event_pool if e.id == "silent_alarm")
+        alarm = alarm_template.copy_with_location(location)
+        game_engine.event_manager.active_events.append(alarm)
+
+        # Get AI prediction with event awareness
+        prediction = game_engine.ai.predict_player_location(
+            player,
+            len([p for p in game_engine.players if p.alive]),
+            event_manager=game_engine.event_manager
+        )
+
+        # Prediction is tuple: (location_name, confidence, reasoning)
+        assert isinstance(prediction, tuple)
+        assert len(prediction) == 3

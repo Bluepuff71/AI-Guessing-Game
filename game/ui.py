@@ -90,8 +90,8 @@ def print_standings(players: List[Player], player_choices: Dict[Player, Location
     console.print()
 
 
-def print_locations(location_manager: LocationManager, previous_ai_location: Location = None):
-    """Print available loot locations."""
+def print_locations(location_manager: LocationManager, previous_ai_location: Location = None, event_manager=None):
+    """Print available loot locations with active events."""
     console.print("[bold]AVAILABLE LOOT THIS ROUND:[/bold]")
 
     if previous_ai_location:
@@ -103,6 +103,15 @@ def print_locations(location_manager: LocationManager, previous_ai_location: Loc
     locations = location_manager.get_all()
     for i, loc in enumerate(locations, 1):
         console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{loc.get_range_str():>6} pts[/yellow]")
+
+        # Show active event for this location
+        if event_manager:
+            event = event_manager.get_location_event(loc)
+            if event:
+                rounds_text = f"{event.rounds_remaining} round{'s' if event.rounds_remaining > 1 else ''}"
+                console.print(
+                    f"      {event.emoji} [cyan]{event.name}:[/cyan] [dim]{event.description} ({rounds_text} left)[/dim]"
+                )
 
     console.print()
 
