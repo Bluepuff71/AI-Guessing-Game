@@ -20,9 +20,11 @@ def test_basics():
     print("1. Testing Locations...")
     loc_manager = LocationManager()
     assert len(loc_manager.get_all()) == 8
-    loc_manager.randomize_all_points()
     for loc in loc_manager.get_all():
-        print(f"  {loc.emoji} {loc.name}: {loc.current_points} pts")
+        # Test individual rolls
+        roll = loc.roll_points()
+        assert loc.min_points <= roll <= loc.max_points, f"Roll {roll} outside range {loc.min_points}-{loc.max_points}"
+        print(f"  {loc.emoji} {loc.name}: {loc.get_range_str()} pts (sample roll: {roll})")
     print("  ✓ Locations working\n")
 
     # Test player

@@ -10,6 +10,7 @@ class ItemType(Enum):
     SCANNER = "scanner"
     LUCKY_CHARM = "lucky_charm"
     INTEL_REPORT = "intel_report"
+    SCOUT = "scout"
 
 
 class Item:

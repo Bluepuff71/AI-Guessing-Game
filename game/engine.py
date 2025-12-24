@@ -63,9 +63,6 @@ class GameEngine:
 
     def play_round(self):
         """Play a single round."""
-        # Randomize location values for this round
-        self.location_manager.randomize_all_points()
-
         # Track player choices for this round
         player_choices: Dict[Player, Location] = {}
         scanner_used_by = []
@@ -86,6 +83,14 @@ class GameEngine:
 
             # Shop phase
             self.shop_phase(player)
+
+            # If player has Scout, let them preview rolls
+            if any(item.type == ItemType.SCOUT and not item.consumed for item in player.items):
+                use_scout = ui.get_player_input("Use Scout to preview loot rolls? (y/n): ", None)
+                if use_scout.lower() == 'y':
+                    self.show_scout_preview(player)
+                    player.use_item(ItemType.SCOUT)
+                    ui.console.print()
 
             # Location choice
             location = self.choose_location_phase(player)
@@ -125,52 +130,76 @@ class GameEngine:
 
     def shop_phase(self, player: Player):
         """Handle shopping for a player."""
-        ui.console.print(f"Your points: [yellow]{player.points}[/yellow]")
-
         # Skip shop if player has no points
         if player.points == 0:
+            ui.console.print(f"Your points: [yellow]{player.points}[/yellow]")
             ui.console.print("[dim]You have no points to spend. Skipping shop.[/dim]\n")
             return
 
-        active_items = player.get_active_items()
-        if active_items:
-            items_str = ", ".join(item.name for item in active_items)
-            ui.console.print(f"Your items: [magenta]{items_str}[/magenta]")
-        else:
-            ui.console.print("Your items: [dim]None[/dim]")
+        # Loop to allow multiple purchases
+        while True:
+            # Display current state
+            ui.console.print(f"Your points: [yellow]{player.points}[/yellow]")
 
-        ui.console.print()
-        ui.print_shop()
+            active_items = player.get_active_items()
+            if active_items:
+                items_str = ", ".join(item.name for item in active_items)
+                ui.console.print(f"Your items: [magenta]{items_str}[/magenta]")
+            else:
+                ui.console.print("Your items: [dim]None[/dim]")
 
-        # Ask if player wants to buy
-        choice = ui.get_player_input("Buy item? (1-4 or Enter to skip): ", None)
+            ui.console.print()
+            ui.print_shop()
 
-        # Skip if empty or "skip"
-        if choice.strip() == "" or choice.lower() == "skip":
-            return
+            # Ask if player wants to buy
+            choice = ui.get_player_input("Buy item? (1-4 or Enter to skip): ", None)
 
-        # Try to purchase item
-        try:
-            item_num = int(choice)
-            if 1 <= item_num <= 4:
-                item_types = list(ItemType)
-                item_type = item_types[item_num - 1]
-                item = ItemShop.get_item(item_type)
+            # Skip if empty or "skip"
+            if choice.strip() == "" or choice.lower() == "skip":
+                ui.console.print()
+                return
 
-                if player.buy_item(item):
-                    ui.console.print(f"[green]✓ Bought {item.name} for {item.cost} pts[/green]")
-                    ui.console.print(f"[yellow]Points remaining: {player.points}[/yellow]")
+            # Try to purchase item
+            try:
+                item_num = int(choice)
+                if 1 <= item_num <= 4:
+                    item_types = list(ItemType)
+                    item_type = item_types[item_num - 1]
+                    item = ItemShop.get_item(item_type)
 
-                    # If Intel Report, show it immediately
-                    if item_type == ItemType.INTEL_REPORT:
-                        self.show_intel_report(player)
-                        item.consumed = True  # Intel Report is consumed immediately
+                    if player.buy_item(item):
+                        ui.console.print(f"[green]✓ Bought {item.name} for {item.cost} pts[/green]")
+
+                        # If Intel Report, show it immediately
+                        if item_type == ItemType.INTEL_REPORT:
+                            self.show_intel_report(player)
+                            item.consumed = True  # Intel Report is consumed immediately
+
+                        ui.console.print()
+                        # Continue loop to allow more purchases
+                    else:
+                        ui.console.print(f"[red]Not enough points! Need {item.cost}, have {player.points}[/red]")
+                        ui.console.print()
+                        # Continue loop, don't exit
                 else:
-                    ui.console.print(f"[red]Not enough points! Need {item.cost}, have {player.points}[/red]")
-        except (ValueError, IndexError):
-            ui.console.print("[red]Invalid choice[/red]")
+                    ui.console.print("[red]Invalid choice - please enter 1-4[/red]")
+                    ui.console.print()
+            except (ValueError, IndexError):
+                ui.console.print("[red]Invalid choice[/red]")
+                ui.console.print()
 
-        ui.console.print()
+    def show_scout_preview(self, player: Player):
+        """Show Scout preview of loot rolls for all locations."""
+        ui.console.print("\n[bold cyan]📡 SCOUT PREVIEW - YOUR POTENTIAL ROLLS:[/bold cyan]\n")
+
+        # Generate preview rolls for all locations
+        locations = self.location_manager.get_all()
+        for i, loc in enumerate(locations, 1):
+            preview_roll = loc.roll_points()
+            ui.console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{preview_roll:>2} pts[/yellow] [dim](range: {loc.get_range_str()})[/dim]")
+
+        ui.console.print("\n[dim]Note: These are YOUR potential rolls. Other players will get different amounts.[/dim]")
+        ui.console.input("\n[dim]Press Enter to continue...[/dim]")
 
     def show_intel_report(self, player: Player):
         """Show Intel Report to a player."""
@@ -212,7 +241,7 @@ class GameEngine:
         location_index = int(choice) - 1
         location = self.location_manager.get_location(location_index)
 
-        ui.console.print(f"[green]You chose: {location.emoji} {location.name} ({location.current_points} pts)[/green]")
+        ui.console.print(f"[green]You chose: {location.emoji} {location.name} ({location.get_range_str()} pts)[/green]")
 
         return location
 
@@ -268,14 +297,18 @@ class GameEngine:
                         use_lucky_charm = True
                         player.use_item(ItemType.LUCKY_CHARM)
 
-                points_earned = chosen_location.current_points
+                # Roll individual points for this player
+                base_roll = chosen_location.roll_points()
+                points_earned = base_roll
                 if use_lucky_charm:
                     points_earned *= 2
 
                 player.add_points(points_earned, has_lucky_charm=False)  # Already handled doubling above
                 ui.print_player_looted(player, chosen_location, points_earned)
 
-                player.record_choice(chosen_location, self.round_num, caught=False, points_earned=points_earned)
+                # Record with base roll value for AI learning (not Lucky Charm doubled value)
+                player.record_choice(chosen_location, self.round_num, caught=False,
+                                   points_earned=points_earned, location_value=base_roll)
 
         ui.console.print()
         ui.print_standings(self.players)

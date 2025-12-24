@@ -4,9 +4,6 @@
     "min_players": 2,
     "max_players": 6
   },
-  "locations": {
-    "point_variance": 0.2
-  },
   "ai": {
     "early_game_rounds": 3,
     "mid_game_rounds": 6,

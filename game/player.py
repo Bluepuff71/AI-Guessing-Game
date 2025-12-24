@@ -50,13 +50,18 @@ class Player:
         return [item for item in self.items if not item.consumed]
 
     def record_choice(self, location: Location, round_num: int,
-                     caught: bool, points_earned: int):
+                     caught: bool, points_earned: int, location_value: int = None):
         """Record a choice for AI learning."""
         self.choice_history.append(location.name)
+
+        # If location_value not provided, use points_earned (base value before Lucky Charm)
+        if location_value is None:
+            location_value = points_earned
+
         self.round_history.append({
             'round': round_num,
             'location': location.name,
-            'location_value': location.current_points,
+            'location_value': location_value,
             'points_before': self.points - points_earned,
             'points_earned': points_earned,
             'caught': caught,

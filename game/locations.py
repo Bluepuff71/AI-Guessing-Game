@@ -7,18 +7,19 @@ from game.config_loader import config
 class Location:
     """Represents a lootable location."""
 
-    def __init__(self, name: str, emoji: str, base_points: int, variance: float = 0.2):
+    def __init__(self, name: str, emoji: str, min_points: int, max_points: int):
         self.name = name
         self.emoji = emoji
-        self.base_points = base_points
-        self.current_points = base_points
-        self.variance = variance
+        self.min_points = min_points
+        self.max_points = max_points
 
-    def randomize_points(self) -> int:
-        """Randomize point value based on variance % from base."""
-        variance_amount = int(self.base_points * self.variance)
-        self.current_points = self.base_points + random.randint(-variance_amount, variance_amount)
-        return self.current_points
+    def roll_points(self) -> int:
+        """Roll a random point value in this location's range for a player."""
+        return random.randint(self.min_points, self.max_points)
+
+    def get_range_str(self) -> str:
+        """Get the point range as a string for display."""
+        return f"{self.min_points}-{self.max_points}"
 
     def __str__(self) -> str:
         return f"{self.emoji} {self.name}"
@@ -30,21 +31,29 @@ class LocationManager:
     def __init__(self):
         # Load from config
         locations_data = config.get_locations()
-        variance = config.get('locations', 'point_variance', default=0.2)
 
         self.locations: List[Location] = []
         for loc_data in locations_data:
+            # Support new min/max format
+            if 'min_points' in loc_data and 'max_points' in loc_data:
+                min_points = loc_data['min_points']
+                max_points = loc_data['max_points']
+            # Backward compatibility: convert old base_points + variance format
+            elif 'base_points' in loc_data:
+                base = loc_data['base_points']
+                variance = loc_data.get('variance', 0.2)
+                variance_amount = int(base * variance)
+                min_points = base - variance_amount
+                max_points = base + variance_amount
+            else:
+                raise ValueError(f"Location '{loc_data['name']}' missing point configuration")
+
             self.locations.append(Location(
                 name=loc_data['name'],
                 emoji=loc_data['emoji'],
-                base_points=loc_data['base_points'],
-                variance=variance
+                min_points=min_points,
+                max_points=max_points
             ))
-
-    def randomize_all_points(self):
-        """Randomize all location point values for a new round."""
-        for loc in self.locations:
-            loc.randomize_points()
 
     def get_location(self, index: int) -> Location:
         """Get location by index (0-based)."""

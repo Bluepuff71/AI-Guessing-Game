@@ -237,7 +237,8 @@ class AIPredictor:
             score += frequency * 10
 
         # Factor 2: Value preference
-        location_value = location.current_points
+        # Use average of range since locations no longer have fixed values
+        location_value = (location.min_points + location.max_points) / 2
         avg_value = features['avg_location_value']
 
         if avg_value > 0:

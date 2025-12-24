@@ -23,6 +23,12 @@
       "name": "Intel Report",
       "cost": 20,
       "description": "See your AI threat level and predictability"
+    },
+    {
+      "id": "scout",
+      "name": "Scout",
+      "cost": 12,
+      "description": "Preview loot rolls before choosing (single use)"
     }
   ]
 }

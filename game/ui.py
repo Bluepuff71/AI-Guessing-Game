@@ -64,7 +64,7 @@ def print_locations(location_manager: LocationManager):
     # Clean single-column list
     locations = location_manager.get_all()
     for i, loc in enumerate(locations, 1):
-        console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{loc.current_points:>2} pts[/yellow]")
+        console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{loc.get_range_str():>6} pts[/yellow]")
 
     console.print()
 
@@ -152,7 +152,7 @@ def print_player_choice(player: Player, location: Location, predicted_location: 
     points_to_win = max(0, 100 - player.points)
 
     console.print(f"[bold]{player.name}[/bold] ({player.points} pts{f', {points_to_win} pts to win' if points_to_win <= 20 else ''}):")
-    console.print(f"  Chose: [green]{location.emoji} {location.name}[/green] ({location.current_points} pts)")
+    console.print(f"  Chose: [green]{location.emoji} {location.name}[/green] ({location.get_range_str()} pts)")
     console.print(f"  AI Predicted: [yellow]{predicted_location}[/yellow] ({confidence:.0%} confidence)")
     console.print(f"  Reasoning: \"{reasoning}\"")
     console.print()
