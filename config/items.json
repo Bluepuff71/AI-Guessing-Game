@@ -1,12 +1,6 @@
 {
   "items": [
     {
-      "id": "shield",
-      "name": "Shield",
-      "cost": 15,
-      "description": "Survive one capture (single use)"
-    },
-    {
       "id": "scanner",
       "name": "Scanner",
       "cost": 25,

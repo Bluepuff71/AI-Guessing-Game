@@ -19,7 +19,7 @@ def test_basics():
     # Test locations
     print("1. Testing Locations...")
     loc_manager = LocationManager()
-    assert len(loc_manager.get_all()) == 8
+    assert len(loc_manager.get_all()) == 5
     for loc in loc_manager.get_all():
         # Test individual rolls
         roll = loc.roll_points()

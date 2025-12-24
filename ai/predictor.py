@@ -195,8 +195,11 @@ class AIPredictor:
         most_common = location_counts.most_common(1)[0]
         most_common_name, count = most_common
 
-        # Calculate confidence based on frequency
-        confidence = count / len(player.choice_history)
+        # Calculate confidence with Laplace smoothing to prevent overconfidence on small samples
+        # Prevents 1/1 = 100%, instead makes it (1+1)/(1+num_locations) = more reasonable
+        num_locations = len(self.location_manager.get_all())
+        total_choices = len(player.choice_history)
+        confidence = (count + 1) / (total_choices + num_locations)
 
         reasoning = f"You've picked {most_common_name} {count}/{len(player.choice_history)} times"
 

@@ -1,52 +1,39 @@
 {
   "locations": [
     {
-      "name": "Gas Station",
+      "name": "Corner Store",
       "emoji": "🏪",
-      "min_points": 4,
-      "max_points": 6
-    },
-    {
-      "name": "Pharmacy",
-      "emoji": "💊",
-      "min_points": 7,
-      "max_points": 13
-    },
-    {
-      "name": "Jewelry Store",
-      "emoji": "💎",
-      "min_points": 12,
-      "max_points": 28
-    },
-    {
-      "name": "Bank Vault",
-      "emoji": "🏦",
-      "min_points": 20,
-      "max_points": 50
-    },
-    {
-      "name": "Warehouse",
-      "emoji": "📦",
-      "min_points": 6,
-      "max_points": 10
+      "min_points": 3,
+      "max_points": 8,
+      "profile": "Safe Haven - Low risk, low reward, consistent small gains"
     },
     {
       "name": "Pawn Shop",
       "emoji": "🔨",
       "min_points": 8,
-      "max_points": 16
+      "max_points": 15,
+      "profile": "Balanced - Medium risk, medium reward, most predictable"
     },
     {
-      "name": "Electronics Store",
-      "emoji": "💻",
-      "min_points": 10,
-      "max_points": 20
+      "name": "Jewelry Store",
+      "emoji": "💎",
+      "min_points": 15,
+      "max_points": 25,
+      "profile": "Premium - High floor, tight range, reliable but pricey"
     },
     {
-      "name": "Convenience Store",
-      "emoji": "🏬",
+      "name": "Casino Vault",
+      "emoji": "🎰",
       "min_points": 5,
-      "max_points": 9
+      "max_points": 35,
+      "profile": "High Roller - Massive variance, boom or bust gamble"
+    },
+    {
+      "name": "Bank Heist",
+      "emoji": "🏦",
+      "min_points": 1,
+      "max_points": 50,
+      "profile": "Jackpot - Extreme variance, ultimate risk/reward"
     }
   ]
 }

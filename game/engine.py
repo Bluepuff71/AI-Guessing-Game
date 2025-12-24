@@ -152,7 +152,8 @@ class GameEngine:
             ui.print_shop()
 
             # Ask if player wants to buy
-            choice = ui.get_player_input("Buy item? (1-4 or Enter to skip): ", None)
+            num_items = len(list(ItemType))
+            choice = ui.get_player_input(f"Buy item? (1-{num_items} or Enter to skip): ", None)
 
             # Skip if empty or "skip"
             if choice.strip() == "" or choice.lower() == "skip":
@@ -162,7 +163,7 @@ class GameEngine:
             # Try to purchase item
             try:
                 item_num = int(choice)
-                if 1 <= item_num <= 4:
+                if 1 <= item_num <= num_items:
                     item_types = list(ItemType)
                     item_type = item_types[item_num - 1]
                     item = ItemShop.get_item(item_type)
@@ -182,7 +183,7 @@ class GameEngine:
                         ui.console.print()
                         # Continue loop, don't exit
                 else:
-                    ui.console.print("[red]Invalid choice - please enter 1-4[/red]")
+                    ui.console.print(f"[red]Invalid choice - please enter 1-{num_items}[/red]")
                     ui.console.print()
             except (ValueError, IndexError):
                 ui.console.print("[red]Invalid choice[/red]")
@@ -218,7 +219,9 @@ class GameEngine:
             insights.append(f"You prefer low-value locations ({behavior['avg_location_value']:.1f} avg points)")
 
         if behavior['choice_variety'] < 0.5:
-            insights.append(f"Limited variety (only {int(behavior['choice_variety'] * 8)} of 8 locations visited)")
+            num_locations = len(self.location_manager)
+            locations_visited = int(behavior['choice_variety'] * num_locations)
+            insights.append(f"Limited variety (only {locations_visited} of {num_locations} locations visited)")
 
         if player.choice_history:
             from collections import Counter
@@ -236,7 +239,8 @@ class GameEngine:
     def choose_location_phase(self, player: Player) -> Location:
         """Handle location choice for a player."""
         ui.console.print("[bold]Choose your looting location:[/bold]")
-        choice = ui.get_player_input("Location (1-8): ", range(1, 9))
+        num_locations = len(self.location_manager)
+        choice = ui.get_player_input(f"Location (1-{num_locations}): ", range(1, num_locations + 1))
 
         location_index = int(choice) - 1
         location = self.location_manager.get_location(location_index)
@@ -267,23 +271,14 @@ class GameEngine:
             chosen_location = player_choices[player]
 
             if chosen_location.name == search_location.name:
-                # Player was caught!
-                has_shield = player.has_item(ItemType.SHIELD)
+                # Player is eliminated
+                ui.print_player_caught(player, shield_saved=False)
+                player.alive = False
+                player.record_choice(chosen_location, self.round_num, caught=True, points_earned=0)
 
-                if has_shield:
-                    # Shield saves them
-                    ui.print_player_caught(player, shield_saved=True)
-                    player.use_item(ItemType.SHIELD)
-                    player.record_choice(chosen_location, self.round_num, caught=True, points_earned=0)
-                else:
-                    # Player is eliminated
-                    ui.print_player_caught(player, shield_saved=False)
-                    player.alive = False
-                    player.record_choice(chosen_location, self.round_num, caught=True, points_earned=0)
-
-                    # Show post-game report
-                    insights = generate_insights(player)
-                    ui.print_post_game_report(player, insights)
+                # Show post-game report
+                insights = generate_insights(player, len(self.location_manager))
+                ui.print_post_game_report(player, insights)
             else:
                 # Player successfully looted
                 has_lucky_charm = player.has_item(ItemType.LUCKY_CHARM)
@@ -350,13 +345,14 @@ class GameEngine:
         # Show post-game reports for all players who haven't seen it yet
         for player in self.players:
             if player.alive:  # Didn't get eliminated (won or AI won)
-                insights = generate_insights(player)
+                insights = generate_insights(player, len(self.location_manager))
                 ui.print_post_game_report(player, insights)
 
         # Save game data
         self.save_game_data()
 
         ui.console.print("\n[bold]Thanks for playing LOOT RUN![/bold]\n")
+        ui.console.input("[dim]Press Enter to return to main menu...[/dim]")
 
     def save_game_data(self):
         """Save game data for ML training."""

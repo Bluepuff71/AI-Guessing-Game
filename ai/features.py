@@ -112,7 +112,7 @@ def calculate_predictability(player: Player) -> float:
     return min(1.0, max(0.0, predictability))
 
 
-def generate_insights(player: Player) -> Dict[str, Any]:
+def generate_insights(player: Player, num_locations: int = 5) -> Dict[str, Any]:
     """Generate insights about player behavior for post-game reports."""
     insights = {
         'predictability': calculate_predictability(player),
@@ -134,8 +134,9 @@ def generate_insights(player: Player) -> Dict[str, Any]:
         insights['tips'].append("Mix in more low-value locations to become less predictable")
 
     if behavior['choice_variety'] < 0.5:
+        locations_visited = int(behavior['choice_variety'] * num_locations)
         insights['patterns'].append(
-            f"Limited variety: Only visited {int(behavior['choice_variety'] * 8)} of 8 locations"
+            f"Limited variety: Only visited {locations_visited} of {num_locations} locations"
         )
         insights['tips'].append("Visit all locations to establish less predictable patterns")
 
