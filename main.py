@@ -17,6 +17,7 @@ import shutil
 from game.engine import GameEngine
 from game import ui
 from game.profile_manager import ProfileManager, PlayerProfile
+from game.animations import play_elimination_animation
 from typing import List, Optional
 
 # Global state for selected profiles
@@ -62,15 +63,16 @@ def show_main_menu():
     ui.console.print("[bold]MAIN MENU:[/bold]")
     ui.console.print("[1] Start New Game")
     ui.console.print("[P] Manage Profiles")
+    ui.console.print("[A] Animation Test")
     ui.console.print("[2] Reset AI Training Data")
     ui.console.print("[3] Exit")
     ui.console.print()
 
     while True:
         choice = ui.console.input("[bold green]Select option:[/bold green] ").strip().upper()
-        if choice in ['1', '2', '3', 'P']:
+        if choice in ['1', '2', '3', 'P', 'A']:
             return choice
-        ui.console.print("[red]Please enter 1, P, 2, or 3[/red]")
+        ui.console.print("[red]Please enter 1, P, A, 2, or 3[/red]")
 
 
 def reset_ai_data():
@@ -251,6 +253,20 @@ def start_game():
     game.play_game()
 
 
+def test_animations():
+    """Test animation sequences."""
+    ui.clear()
+    ui.console.print("\n[bold cyan]ANIMATION TEST[/bold cyan]\n")
+    ui.console.print("Playing elimination animation...\n")
+    ui.console.input("[dim]Press Enter to start...[/dim]")
+
+    play_elimination_animation()
+
+    ui.clear()
+    ui.console.print("\n[green]Animation test complete![/green]")
+    ui.console.input("\n[dim]Press Enter to return to menu...[/dim]")
+
+
 def check_and_migrate_legacy_games():
     """Check if legacy games need migration and offer to migrate."""
     pm = ProfileManager()
@@ -334,6 +350,8 @@ def main():
             # After game ends, return to menu
         elif choice == 'P':
             manage_profiles()
+        elif choice == 'A':
+            test_animations()
         elif choice == '2':
             reset_ai_data()
         elif choice == '3':
