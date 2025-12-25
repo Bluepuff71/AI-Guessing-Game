@@ -331,7 +331,7 @@ class TestExtractHidingFeatures:
             'successful_hides': 3,
             'total_run_attempts': 3,
             'successful_runs': 2,
-            'favorite_hide_spots': {'spot_a': 3, 'spot_b': 2},
+            'favorite_escape_options': {'spot_a': 3, 'spot_b': 2},
             'hide_vs_run_ratio': 0.625
         }
 
@@ -354,7 +354,7 @@ class TestExtractHidingFeatures:
             'successful_hides': 6,
             'total_run_attempts': 2,
             'successful_runs': 1,
-            'favorite_hide_spots': {'spot_a': 6, 'spot_b': 2},
+            'favorite_escape_options': {'spot_a': 6, 'spot_b': 2},
             'hide_vs_run_ratio': 0.8
         }
 
@@ -388,7 +388,7 @@ class TestCalculateHidePredictability:
             'successful_hides': 5,
             'total_run_attempts': 2,
             'successful_runs': 1,
-            'favorite_hide_spots': {'spot_a': 10},  # Always same spot
+            'favorite_escape_options': {'spot_a': 10},  # Always same spot
             'hide_vs_run_ratio': 0.83
         }
 
@@ -407,7 +407,7 @@ class TestCalculateHidePredictability:
             'successful_hides': 5,
             'total_run_attempts': 10,  # Equal hide/run
             'successful_runs': 5,
-            'favorite_hide_spots': {'spot_a': 3, 'spot_b': 3, 'spot_c': 2, 'spot_d': 2},
+            'favorite_escape_options': {'spot_a': 3, 'spot_b': 3, 'spot_c': 2, 'spot_d': 2},
             'hide_vs_run_ratio': 0.5
         }
 
@@ -426,7 +426,7 @@ class TestCalculateHidePredictability:
             'successful_hides': 1,
             'total_run_attempts': 1,
             'successful_runs': 1,
-            'favorite_hide_spots': {'spot_a': 1},
+            'favorite_escape_options': {'spot_a': 1},
             'hide_vs_run_ratio': 0.5
         }
 
@@ -444,7 +444,7 @@ class TestCalculateHidePredictability:
             'successful_hides': 3,
             'total_run_attempts': 5,
             'successful_runs': 3,
-            'favorite_hide_spots': {},  # Empty spots dict
+            'favorite_escape_options': {},  # Empty spots dict
             'hide_vs_run_ratio': 0.5
         }
 
@@ -475,7 +475,7 @@ class TestGenerateInsightsWithHiding:
             'successful_hides': 3,
             'total_run_attempts': 2,
             'successful_runs': 2,
-            'favorite_hide_spots': {'spot_a': 2, 'spot_b': 1},
+            'favorite_escape_options': {'spot_a': 2, 'spot_b': 1},
             'hide_vs_run_ratio': 0.6
         }
 
@@ -503,7 +503,7 @@ class TestGenerateInsightsWithHiding:
             'successful_hides': 0,
             'total_run_attempts': 2,
             'successful_runs': 1,
-            'favorite_hide_spots': {'spot_a': 2, 'spot_b': 1},
+            'favorite_escape_options': {'spot_a': 2, 'spot_b': 1},
             'hide_vs_run_ratio': 0.6
         }
 
@@ -531,7 +531,7 @@ class TestGenerateInsightsWithHiding:
             'successful_hides': 6,
             'total_run_attempts': 2,
             'successful_runs': 1,
-            'favorite_hide_spots': {'spot_a': 5, 'spot_b': 3},
+            'favorite_escape_options': {'spot_a': 5, 'spot_b': 3},
             'hide_vs_run_ratio': 0.8
         }
 
@@ -559,7 +559,7 @@ class TestGenerateInsightsWithHiding:
             'successful_hides': 1,
             'total_run_attempts': 8,
             'successful_runs': 6,
-            'favorite_hide_spots': {'spot_a': 1, 'spot_b': 1},
+            'favorite_escape_options': {'spot_a': 1, 'spot_b': 1},
             'hide_vs_run_ratio': 0.2
         }
 
@@ -586,7 +586,7 @@ class TestGenerateInsightsWithHiding:
             'successful_hides': 3,
             'total_run_attempts': 2,
             'successful_runs': 1,
-            'favorite_hide_spots': {'behind_boxes': 4, 'freezer': 1},
+            'favorite_escape_options': {'behind_boxes': 4, 'freezer': 1},
             'hide_vs_run_ratio': 0.7
         }
 

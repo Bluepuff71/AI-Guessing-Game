@@ -11,13 +11,12 @@ class TestPassiveType:
         assert PassiveType.AI_WHISPERER.value == "ai_whisperer"
         assert PassiveType.INSIDE_KNOWLEDGE.value == "inside_knowledge"
         assert PassiveType.ESCAPE_ARTIST.value == "escape_artist"
-        assert PassiveType.SHADOW_WALKER.value == "shadow_walker"
         assert PassiveType.QUICK_FEET.value == "quick_feet"
         assert PassiveType.HIGH_ROLLER.value == "high_roller"
 
     def test_passive_type_enum_count(self):
         """Test expected number of passive types."""
-        assert len(PassiveType) == 6
+        assert len(PassiveType) == 5
 
 
 class TestPassive:
@@ -140,20 +139,6 @@ class TestPassiveShop:
         assert passive.type == PassiveType.AI_WHISPERER
         assert passive.name == "AI Whisperer"
         assert passive.cost == 15
-
-    def test_get_passive_returns_none_for_invalid(self, temp_config_dir, temp_passives_config, monkeypatch):
-        """Test get_passive returns None for type not in config."""
-        from game.config_loader import ConfigLoader
-        ConfigLoader._instance = None
-        new_config = ConfigLoader()
-
-        from game import config_loader
-        monkeypatch.setattr(config_loader, 'config', new_config)
-
-        PassiveShop.PASSIVES = None
-        # SHADOW_WALKER is not in our test config
-        passive = PassiveShop.get_passive(PassiveType.SHADOW_WALKER)
-        assert passive is None
 
     def test_get_all_passives(self, temp_config_dir, temp_passives_config, monkeypatch):
         """Test getting all passives."""

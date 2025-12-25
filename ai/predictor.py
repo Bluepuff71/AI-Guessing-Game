@@ -217,12 +217,10 @@ class AIPredictor:
         from game.passives import PassiveType
         has_high_roller = player.has_passive(PassiveType.HIGH_ROLLER)
         has_escape_artist = player.has_passive(PassiveType.ESCAPE_ARTIST)
-        has_shadow_walker = player.has_passive(PassiveType.SHADOW_WALKER)
         has_quick_feet = player.has_passive(PassiveType.QUICK_FEET)
 
         features.append(1.0 if has_high_roller else 0.0)
         features.append(1.0 if has_escape_artist else 0.0)
-        features.append(1.0 if has_shadow_walker else 0.0)
         features.append(1.0 if has_quick_feet else 0.0)
 
         # Event features (optional - for newly trained models)
@@ -690,11 +688,6 @@ class AIPredictor:
         if player.has_passive(PassiveType.QUICK_FEET):
             total_threat *= 1.15  # 15% increase - even if caught, they escape with points
 
-        # Shadow Walker with hiding expertise is slightly less threatening
-        # (easier to predict they'll hide)
-        if player.has_passive(PassiveType.SHADOW_WALKER):
-            total_threat *= 0.95  # 5% reduction - predictable hiding preference
-
         return min(1.0, total_threat)
 
     def predict_hide_or_run(self, player: Player, location) -> tuple:
@@ -767,11 +760,11 @@ class AIPredictor:
         if not spots:
             return (None, 0.0)
 
-        if not hasattr(player, 'hiding_stats') or not player.hiding_stats['favorite_hide_spots']:
+        if not hasattr(player, 'hiding_stats') or not player.hiding_stats['favorite_escape_options']:
             # No history - predict random
             return (random.choice(spots)['id'], 0.25)
 
-        favorite_spots = player.hiding_stats['favorite_hide_spots']
+        favorite_spots = player.hiding_stats['favorite_escape_options']
 
         # Filter to spots at this location
         location_spot_ids = {spot['id'] for spot in spots}

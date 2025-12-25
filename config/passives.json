@@ -15,7 +15,7 @@
       "id": "inside_knowledge",
       "name": "Inside Knowledge",
       "cost": 10,
-      "description": "See point tier hints (Low/Med/High) before choosing",
+      "description": "See if rolls are trending high or low before choosing",
       "emoji": "📊",
       "category": "intel",
       "effects": {
@@ -32,18 +32,6 @@
       "effects": {
         "hide_bonus": 0.15,
         "run_bonus": 0.15
-      }
-    },
-    {
-      "id": "shadow_walker",
-      "name": "Shadow Walker",
-      "cost": 10,
-      "description": "+20% to hiding success, -10% to running success",
-      "emoji": "🌑",
-      "category": "escape",
-      "effects": {
-        "hide_bonus": 0.20,
-        "run_bonus": -0.10
       }
     },
     {

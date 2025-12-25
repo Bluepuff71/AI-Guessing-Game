@@ -9,7 +9,6 @@ class PassiveType(Enum):
     AI_WHISPERER = "ai_whisperer"
     INSIDE_KNOWLEDGE = "inside_knowledge"
     ESCAPE_ARTIST = "escape_artist"
-    SHADOW_WALKER = "shadow_walker"
     QUICK_FEET = "quick_feet"
     HIGH_ROLLER = "high_roller"
 

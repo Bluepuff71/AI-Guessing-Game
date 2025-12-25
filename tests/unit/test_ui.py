@@ -633,14 +633,14 @@ class TestLocationsWithEvents:
         assert len(result) > 0
 
     def test_print_locations_with_point_hints(self, mock_console, sample_location_manager):
-        """Test print_locations with point tier hints."""
+        """Test print_locations with point trend hints."""
         from game.ui import print_locations
 
         console, output = mock_console
 
         point_hints = {
-            sample_location_manager.get_location(0): "Low",
-            sample_location_manager.get_location(1): "High"
+            sample_location_manager.get_location(0).name: "Trending Low",
+            sample_location_manager.get_location(1).name: "Trending High"
         }
 
         print_locations(sample_location_manager, point_hints=point_hints)
@@ -731,9 +731,9 @@ class TestPrintLocationsEdgeCases:
 
         # Point hints keyed by location NAME
         point_hints = {
-            sample_location_manager.get_location(0).name: "Low",
-            sample_location_manager.get_location(1).name: "Med",
-            sample_location_manager.get_location(2).name if len(sample_location_manager.get_all()) > 2 else sample_location_manager.get_location(0).name: "High"
+            sample_location_manager.get_location(0).name: "Trending Low",
+            sample_location_manager.get_location(1).name: "Trending High",
+            sample_location_manager.get_location(2).name if len(sample_location_manager.get_all()) > 2 else sample_location_manager.get_location(0).name: "Trending High"
         }
 
         print_locations(sample_location_manager, point_hints=point_hints)

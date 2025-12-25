@@ -76,7 +76,7 @@ class TestPrediction:
 
         class MockHidingStats:
             escape_option_history = ['hide1', 'hide1', 'run1', 'hide1']
-            favorite_hide_spots = {}
+            favorite_escape_options = {}
 
         class MockProfile:
             hiding_stats = MockHidingStats()
@@ -131,10 +131,10 @@ class TestCrossGameHistory:
         result = sample_escape_predictor._get_cross_game_history(MockProfile())
         assert result == ['hide1', 'run1', 'hide2']
 
-    def test_get_cross_game_history_with_favorite_hide_spots(self, sample_escape_predictor):
-        """Test cross-game history fallback to favorite_hide_spots."""
+    def test_get_cross_game_history_with_favorite_escape_options(self, sample_escape_predictor):
+        """Test cross-game history fallback to favorite_escape_options."""
         class MockHidingStats:
-            favorite_hide_spots = {'hide1': 3, 'hide2': 2}
+            favorite_escape_options = {'hide1': 3, 'hide2': 2}
 
         class MockProfile:
             hiding_stats = MockHidingStats()
@@ -145,9 +145,9 @@ class TestCrossGameHistory:
         assert result.count('hide2') == 2
 
     def test_get_cross_game_history_caps_at_five(self, sample_escape_predictor):
-        """Test favorite_hide_spots count is capped at 5."""
+        """Test favorite_escape_options count is capped at 5."""
         class MockHidingStats:
-            favorite_hide_spots = {'hide1': 10}  # More than 5
+            favorite_escape_options = {'hide1': 10}  # More than 5
 
         class MockProfile:
             hiding_stats = MockHidingStats()

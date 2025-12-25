@@ -62,11 +62,11 @@ class EscapePredictor:
             stats = profile.hiding_stats
             if hasattr(stats, 'escape_option_history'):
                 return list(stats.escape_option_history)
-            # Fallback: use old favorite_hide_spots if available
-            if hasattr(stats, 'favorite_hide_spots') and stats.favorite_hide_spots:
+            # Fallback: use favorite_escape_options if available
+            if hasattr(stats, 'favorite_escape_options') and stats.favorite_escape_options:
                 # Convert frequency dict to list (repeat based on count)
                 history = []
-                for spot_id, count in stats.favorite_hide_spots.items():
+                for spot_id, count in stats.favorite_escape_options.items():
                     history.extend([spot_id] * min(count, 5))  # Cap at 5 per spot
                 return history
 
@@ -190,10 +190,6 @@ class EscapePredictor:
         # Adjust hide preference based on player passives
         from game.passives import PassiveType
         if hasattr(player, 'has_passive'):
-            # Shadow Walker: +20% hide bonus, -10% run - strongly prefers hiding
-            if player.has_passive(PassiveType.SHADOW_WALKER):
-                hide_preference = min(1.0, hide_preference + 0.25)
-
             # Quick Feet: +25% run bonus, keeps 95% points - prefers running
             if player.has_passive(PassiveType.QUICK_FEET):
                 hide_preference = max(0.0, hide_preference - 0.20)

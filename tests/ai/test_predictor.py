@@ -171,7 +171,7 @@ class TestMLFeatureExtraction:
 
         # Should return a list of numeric features
         assert isinstance(features, list)
-        assert len(features) == 16  # Expected feature count (3 current + 8 history + 1 passives + 4 passive types)
+        assert len(features) == 15  # Expected feature count (3 current + 8 history + 1 passives + 3 passive types)
         assert all(isinstance(f, (int, float)) for f in features)
 
     def test_extract_ml_features_no_history(self, temp_config_dir, sample_location_manager):
@@ -181,7 +181,7 @@ class TestMLFeatureExtraction:
 
         features = ai._extract_ml_features(player, num_players_alive=2)
 
-        assert len(features) == 16  # 3 current + 8 history + 1 passives + 4 passive types
+        assert len(features) == 15  # 3 current + 8 history + 1 passives + 3 passive types
         # Many features should be 0 with no history (features 3-10 are history features)
         assert features[3] == 0  # avg_value (first history feature)
         assert features[4] == 0  # recent_avg
@@ -681,7 +681,7 @@ class TestMLFeatureExtractionAdvanced:
         features = ai._extract_ml_features(player, 2)
 
         # Risk trend feature should be positive (increasing)
-        assert len(features) == 16
+        assert len(features) == 15
 
     def test_extract_ml_features_risk_trend_decreasing(self, temp_config_dir, sample_location_manager):
         """Test ML features capture decreasing risk trend."""
@@ -701,7 +701,7 @@ class TestMLFeatureExtractionAdvanced:
 
         features = ai._extract_ml_features(player, 2)
 
-        assert len(features) == 16
+        assert len(features) == 15
 
 
 class TestLocationScoring:
@@ -820,7 +820,7 @@ class TestPredictHideOrRun:
             'total_run_attempts': 0,
             'successful_hides': 1,
             'successful_runs': 0,
-            'favorite_hide_spots': {}
+            'favorite_escape_options': {}
         }
         loc = sample_location_manager.get_location(0)
 
@@ -838,7 +838,7 @@ class TestPredictHideOrRun:
             'total_run_attempts': 5,
             'successful_hides': 4,  # 80% success
             'successful_runs': 2,   # 40% success
-            'favorite_hide_spots': {}
+            'favorite_escape_options': {}
         }
         loc = sample_location_manager.get_location(0)
 
@@ -856,7 +856,7 @@ class TestPredictHideOrRun:
             'total_run_attempts': 5,
             'successful_hides': 1,  # 20% success
             'successful_runs': 4,   # 80% success
-            'favorite_hide_spots': {}
+            'favorite_escape_options': {}
         }
         loc = sample_location_manager.get_location(0)
 
@@ -874,7 +874,7 @@ class TestPredictHideOrRun:
             'total_run_attempts': 2,
             'successful_hides': 4,  # 50% success
             'successful_runs': 1,   # 50% success
-            'favorite_hide_spots': {}
+            'favorite_escape_options': {}
         }
         loc = sample_location_manager.get_location(0)
 
@@ -910,13 +910,13 @@ class TestPredictHidingSpot:
 
         ai = AIPredictor(sample_location_manager)
         player = Player(1, "Alice")
-        # Initialize hiding_stats with empty favorite_hide_spots
+        # Initialize hiding_stats with empty favorite_escape_options
         player.hiding_stats = {
             'total_hide_attempts': 0,
             'total_run_attempts': 0,
             'successful_hides': 0,
             'successful_runs': 0,
-            'favorite_hide_spots': {}
+            'favorite_escape_options': {}
         }
         loc = sample_location_manager.get_location(0)
 
@@ -940,7 +940,7 @@ class TestPredictHidingSpot:
             'total_run_attempts': 0,
             'successful_hides': 3,
             'successful_runs': 0,
-            'favorite_hide_spots': {'spot1': 4, 'spot2': 1}
+            'favorite_escape_options': {'spot1': 4, 'spot2': 1}
         }
         loc = sample_location_manager.get_location(0)
 
@@ -964,7 +964,7 @@ class TestPredictHidingSpot:
             'total_run_attempts': 0,
             'successful_hides': 3,
             'successful_runs': 0,
-            'favorite_hide_spots': {'other_spot': 5}  # Not at this location
+            'favorite_escape_options': {'other_spot': 5}  # Not at this location
         }
         loc = sample_location_manager.get_location(0)
 
@@ -1099,33 +1099,6 @@ class TestPassiveEffectsOnThreat:
 
         # Threat should be increased
         assert quick_threat > base_threat
-
-    def test_win_threat_shadow_walker(self, temp_config_dir, sample_location_manager):
-        """Test Shadow Walker slightly reduces threat."""
-        ai = AIPredictor(sample_location_manager)
-        player = Player(1, "Alice")
-        player.points = 50
-
-        # Calculate base threat
-        base_threat = ai._calculate_win_threat(player)
-
-        # Add Shadow Walker
-        from game.passives import PassiveType, Passive
-        shadow_walker = Passive(
-            type=PassiveType.SHADOW_WALKER,
-            name="Shadow Walker",
-            cost=18,
-            description="Test",
-            emoji="🌑",
-            category="defense",
-            effects={"hide_bonus": 0.20}
-        )
-        player.passive_manager.add_passive(shadow_walker)
-
-        shadow_threat = ai._calculate_win_threat(player)
-
-        # Threat should be slightly reduced
-        assert shadow_threat < base_threat
 
 
 class TestSoftmaxSelection:

@@ -1371,8 +1371,8 @@ class TestHideOrRunEdgeCases:
         player = game_engine.players[0]
         player.points = 50
 
-        # Give player Shadow Walker (hide bonus)
-        passive = PassiveShop.get_passive(PassiveType.SHADOW_WALKER)
+        # Give player Escape Artist (hide bonus)
+        passive = PassiveShop.get_passive(PassiveType.ESCAPE_ARTIST)
         if passive:
             player.passive_manager.add_passive(passive)
 

@@ -49,7 +49,6 @@ def extract_features(player: Player, round_num: int, num_players_alive: int,
     # Track specific passives that affect player behavior
     features['has_high_roller'] = player.has_passive(PassiveType.HIGH_ROLLER)
     features['has_escape_artist'] = player.has_passive(PassiveType.ESCAPE_ARTIST)
-    features['has_shadow_walker'] = player.has_passive(PassiveType.SHADOW_WALKER)
     features['has_quick_feet'] = player.has_passive(PassiveType.QUICK_FEET)
     features['has_ai_whisperer'] = player.has_passive(PassiveType.AI_WHISPERER)
     features['has_inside_knowledge'] = player.has_passive(PassiveType.INSIDE_KNOWLEDGE)
@@ -241,8 +240,8 @@ def generate_insights(player: Player, num_locations: int = 5) -> Dict[str, Any]:
                     insights['tips'].append("Running is risky - hiding might improve your survival rate")
 
         # Favorite hiding spots
-        if player.hiding_stats['favorite_hide_spots']:
-            sorted_spots = sorted(player.hiding_stats['favorite_hide_spots'].items(),
+        if player.hiding_stats['favorite_escape_options']:
+            sorted_spots = sorted(player.hiding_stats['favorite_escape_options'].items(),
                                 key=lambda x: x[1], reverse=True)
             if sorted_spots[0][1] >= 2:
                 spot_id = sorted_spots[0][0]
@@ -317,10 +316,10 @@ def calculate_hide_predictability(player: Player) -> float:
     stats = player.hiding_stats
 
     # Calculate spot predictability
-    if stats['favorite_hide_spots']:
-        total = sum(stats['favorite_hide_spots'].values())
+    if stats['favorite_escape_options']:
+        total = sum(stats['favorite_escape_options'].values())
         if total > 0:
-            most_common_count = max(stats['favorite_hide_spots'].values())
+            most_common_count = max(stats['favorite_escape_options'].values())
             spot_predictability = most_common_count / total
         else:
             spot_predictability = 0.5

@@ -112,7 +112,7 @@ def print_locations(location_manager: LocationManager, previous_ai_location: Loc
         elif point_hints and loc.name in point_hints:
             # Show Inside Knowledge hint
             hint = point_hints[loc.name]
-            hint_color = "green" if hint == "Low" else "yellow" if hint == "Med" else "red"
+            hint_color = "green" if hint == "Trending High" else "yellow"
             console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{loc.get_range_str():>6} pts[/yellow] [{hint_color}]📊 {hint}[/{hint_color}]")
         else:
             console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{loc.get_range_str():>6} pts[/yellow]")
@@ -583,7 +583,7 @@ def select_escape_option(escape_options: list, player, location_points: int) -> 
     all_options = []
 
     # Show hiding spots
-    console.print("[bold green]HIDING SPOTS[/bold green] [dim](Survive with 0 points)[/dim]")
+    console.print(f"[bold green]HIDING SPOTS[/bold green] [dim](Survive with {retention_points} points)[/dim]")
     for i, spot in enumerate(hiding_spots, 1):
         console.print(f"  [{i}] {spot['emoji']} [bold]{spot['name']}[/bold]")
         console.print(f"      [dim]{spot['description']}[/dim]")
@@ -664,7 +664,7 @@ def print_escape_result(player, result: dict, escape_options: list = None):
         if result.get('choice_type') == 'run':
             console.print(f"[green]You kept {result['points_awarded']} points (80% of {result.get('location_points', 0)})[/green]")
         else:
-            console.print(f"[green]You survived by hiding! (0 points earned)[/green]")
+            console.print(f"[green]You survived by hiding! Kept {result['points_awarded']} points (80% of {result.get('location_points', 0)})[/green]")
 
         console.print()
         console.print(f"[dim]Current score: {player.points} pts[/dim]")

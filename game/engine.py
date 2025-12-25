@@ -237,20 +237,22 @@ class GameEngine:
     def _generate_point_hints(self, player: Player) -> Optional[Dict[str, str]]:
         """Generate point hints if player has Inside Knowledge passive.
 
-        Returns dict of location_name -> "Low"/"Med"/"High" hint, or None if no passive.
+        Returns dict of location_name -> "Trending High"/"Trending Low" hint, or None if no passive.
+        Pre-rolls a value and shows if it's above or below the midpoint.
         """
         if not player.has_passive(PassiveType.INSIDE_KNOWLEDGE):
             return None
 
         hints = {}
         for loc in self.location_manager.get_all():
-            avg = (loc.min_points + loc.max_points) / 2
-            if avg <= 10:
-                hints[loc.name] = "Low"
-            elif avg <= 20:
-                hints[loc.name] = "Med"
+            # Pre-roll to determine trend
+            preview_roll = loc.roll_points()
+            midpoint = (loc.min_points + loc.max_points) / 2
+
+            if preview_roll >= midpoint:
+                hints[loc.name] = "Trending High"
             else:
-                hints[loc.name] = "High"
+                hints[loc.name] = "Trending Low"
 
         return hints
 
