@@ -47,17 +47,7 @@ class EscapePredictor:
         # Combine histories (cross-game first, then current game)
         combined_history = cross_game_history + game_history
 
-        # Early catches (1-2): Random prediction (learning phase)
-        if caught_count <= 1:
-            return self._random_prediction(escape_options)
-
-        # Mid catches (2-4): Recency-weighted pattern matching
-        if caught_count <= 4:
-            return self._recency_weighted_prediction(
-                escape_options, combined_history, player
-            )
-
-        # Late catches (5+): Advanced behavioral prediction
+        # Always use behavioral prediction
         return self._behavioral_prediction(
             escape_options, combined_history, player, profile
         )

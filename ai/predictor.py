@@ -48,40 +48,28 @@ class AIPredictor:
         """
         self.round_num += 1
 
-        # Early game (rounds 1-3): Always use random (learning phase)
-        if self.round_num <= 3:
-            prediction = self._random_prediction(player)
-        # Not enough history yet
-        elif len(player.choice_history) < 2:
-            prediction = self._simple_pattern_prediction(player)
-        else:
-            # Try per-player ML prediction if player has a profile
-            prediction = None
-            if hasattr(player, 'profile_id') and player.profile_id:
-                try:
-                    player_prediction = self._player_ml_prediction(player, num_players_alive, event_manager)
-                    if player_prediction:
-                        prediction = player_prediction
-                except Exception:
-                    # Fall through to global model or baseline
-                    pass
+        # Try per-player ML prediction if player has a profile
+        prediction = None
+        if hasattr(player, 'profile_id') and player.profile_id:
+            try:
+                player_prediction = self._player_ml_prediction(player, num_players_alive, event_manager)
+                if player_prediction:
+                    prediction = player_prediction
+            except Exception:
+                # Fall through to global model or baseline
+                pass
 
-            # Try global ML prediction if available
-            if not prediction and self.use_ml and self.ml_trainer:
-                try:
-                    prediction = self._ml_prediction(player, num_players_alive, event_manager)
-                except Exception as e:
-                    # Fall back to baseline if ML fails
-                    pass
+        # Try global ML prediction if available
+        if not prediction and self.use_ml and self.ml_trainer:
+            try:
+                prediction = self._ml_prediction(player, num_players_alive, event_manager)
+            except Exception:
+                # Fall back to baseline if ML fails
+                pass
 
-            # Fallback: use baseline AI
-            if not prediction:
-                # Mid game (rounds 4-6): Simple pattern matching
-                if self.round_num <= 6:
-                    prediction = self._simple_pattern_prediction(player)
-                else:
-                    # Late game (rounds 7+): Advanced prediction
-                    prediction = self._advanced_prediction(player, num_players_alive, event_manager)
+        # Fallback: always use behavioral analysis
+        if not prediction:
+            prediction = self._advanced_prediction(player, num_players_alive, event_manager)
 
         # Adjust prediction based on events
         if event_manager:
