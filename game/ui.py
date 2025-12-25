@@ -157,7 +157,7 @@ def select_location(location_manager: LocationManager, color: str = "green", eve
     return select_option(choices, "Choose your looting location:", color=color)
 
 
-def select_passive(player: Player) -> Optional[int]:
+def select_passive(player: Player) -> Optional[PassiveType]:
     """
     Select a passive to purchase using arrow keys.
 
@@ -165,12 +165,12 @@ def select_passive(player: Player) -> Optional[int]:
         player: Player making the purchase
 
     Returns:
-        1-based index of selected passive, or None to skip
+        PassiveType of selected passive, or None to skip
     """
     PassiveShop._load_passives()
 
     choices = []
-    for i, passive_type in enumerate(PassiveType, 1):
+    for passive_type in PassiveType:
         passive = PassiveShop.PASSIVES.get(passive_type)
         if not passive:
             continue
@@ -180,10 +180,10 @@ def select_passive(player: Player) -> Optional[int]:
         if owned:
             text = f"{passive.emoji} {passive.name} - OWNED"
             # Still add but mark as disabled (can't reselect owned)
-            choices.append({'text': text, 'value': i, 'disabled': True})
+            choices.append({'text': text, 'value': passive_type, 'disabled': True})
         else:
             text = f"{passive.emoji} {passive.name} - {passive.cost} pts"
-            choices.append({'text': text, 'value': i})
+            choices.append({'text': text, 'value': passive_type})
 
     # Add skip option
     choices.append({'text': "⏭️  Skip (continue without buying)", 'value': None})

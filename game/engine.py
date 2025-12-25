@@ -177,15 +177,15 @@ class GameEngine:
             ui.console.print()
 
             # Use arrow-key selection for passive purchase
-            passive_num = ui.select_passive(player)
+            passive_type = ui.select_passive(player)
 
             # Skip if None (user chose to skip)
-            if passive_num is None:
+            if passive_type is None:
                 ui.console.print()
                 return
 
             # Try to purchase passive
-            passive = PassiveShop.get_passive_by_index(passive_num)
+            passive = PassiveShop.get_passive(passive_type)
 
             if passive is None:
                 ui.console.print("[red]Invalid passive[/red]")

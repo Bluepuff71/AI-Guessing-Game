@@ -4,6 +4,7 @@ from game.engine import GameEngine
 from game.player import Player
 from game.items import ItemShop, ItemType
 from game.locations import Location
+from game.passives import PassiveType
 
 
 @pytest.fixture
@@ -70,9 +71,9 @@ class TestShopPhase:
         player = game_engine.players[0]
         player.points = 50
 
-        # Mock select_passive: buy first passive (1), then skip (None)
+        # Mock select_passive: buy first passive, then skip (None)
         import game.ui
-        selections = iter([1, None])
+        selections = iter([PassiveType.AI_WHISPERER, None])
         monkeypatch.setattr(game.ui, 'select_passive', lambda p: next(selections, None))
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
 
@@ -92,9 +93,9 @@ class TestShopPhase:
         player = game_engine.players[0]
         player.points = 5
 
-        # Mock select_passive: try to buy expensive passive (1), then skip (None)
+        # Mock select_passive: try to buy expensive passive, then skip (None)
         import game.ui
-        selections = iter([1, None])
+        selections = iter([PassiveType.AI_WHISPERER, None])
         monkeypatch.setattr(game.ui, 'select_passive', lambda p: next(selections, None))
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
 
@@ -480,9 +481,9 @@ class TestPassiveShopPhase:
         player = game_engine.players[0]
         player.points = 50
 
-        # Mock select_passive: buy first passive (1), then skip (None)
+        # Mock select_passive: buy first passive, then skip (None)
         import game.ui
-        selections = iter([1, None])
+        selections = iter([PassiveType.AI_WHISPERER, None])
         monkeypatch.setattr(game.ui, 'select_passive', lambda p: next(selections, None))
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
 
