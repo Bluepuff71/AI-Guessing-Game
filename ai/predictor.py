@@ -242,7 +242,7 @@ class AIPredictor:
             min_modifier = 1.0
             for event in event_manager.active_events:
                 if event.point_modifier:
-                    test_val = event.point_modifier(10)
+                    test_val = event.apply_point_modifier(10)
                     modifier = test_val / 10.0
                     max_modifier = max(max_modifier, modifier)
                     min_modifier = min(min_modifier, modifier)

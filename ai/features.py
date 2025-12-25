@@ -64,7 +64,7 @@ def extract_features(player: Player, round_num: int, num_players_alive: int,
             # Track point modifiers if they exist
             if event.point_modifier:
                 # Test the modifier with a sample value to see effect
-                test_val = event.point_modifier(10)
+                test_val = event.apply_point_modifier(10)
                 modifier_ratio = test_val / 10.0
                 max_point_modifier = max(max_point_modifier, modifier_ratio)
                 min_point_modifier = min(min_point_modifier, modifier_ratio)
