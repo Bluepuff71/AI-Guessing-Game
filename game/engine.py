@@ -64,7 +64,10 @@ class GameEngine:
                 if profile:
                     # Player with profile
                     self.players.append(Player(i, profile.name, profile.profile_id))
-                    ui.console.print(f"[green]Player {i+1}: {profile.name}[/green] "
+                    # Get color for this player
+                    from game.player import PLAYER_COLORS
+                    player_color = PLAYER_COLORS[i % len(PLAYER_COLORS)]
+                    ui.console.print(f"[{player_color}]Player {i+1}: {profile.name}[/{player_color}] "
                                    f"[dim]({profile.stats.wins}W-{profile.stats.losses}L)[/dim]")
                 else:
                     # Guest player - need to ask for name
@@ -204,16 +207,22 @@ class GameEngine:
                     if player.buy_item(item):
                         ui.console.print(f"[green]✓ Bought {item.name} for {item.cost} pts[/green]")
 
+                        # Track if item has its own prompt
+                        auto_consumed_item = False
+
                         # Auto-activate items based on type
                         if item_type == ItemType.INTEL_REPORT:
                             self.show_intel_report(player)
                             item.consumed = True  # Intel Report is consumed immediately
+                            auto_consumed_item = True
                         elif item_type == ItemType.SCOUT:
                             self.show_scout_preview(player)
                             player.use_item(ItemType.SCOUT)
+                            auto_consumed_item = True
 
-                        # Clear screen before redrawing shop
-                        ui.console.input("\n[dim]Press Enter to continue shopping...[/dim]")
+                        # Only show prompt for items without their own UI
+                        if not auto_consumed_item:
+                            ui.console.input("\n[dim]Press Enter to continue shopping...[/dim]")
                         ui.clear()
                         ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
 
@@ -271,8 +280,8 @@ class GameEngine:
 
         if behavior['choice_variety'] < 0.5:
             num_locations = len(self.location_manager)
-            locations_visited = int(behavior['choice_variety'] * num_locations)
-            insights.append(f"Limited variety (only {locations_visited} of {num_locations} locations visited)")
+            unique_locations = len(behavior['location_frequencies'])  # Direct count from dict
+            insights.append(f"Limited variety (only {unique_locations} of {num_locations} locations visited)")
 
         if player.choice_history:
             from collections import Counter
@@ -345,6 +354,16 @@ class GameEngine:
         for player in [p for p in self.players if p.alive]:
             chosen_location = player_choices[player]
 
+            # Roll individual points for this player FIRST (before catch check)
+            # Check if this player used Scout and has a cached roll
+            if player.id in self.scout_rolls and chosen_location.name in self.scout_rolls[player.id]:
+                base_roll = self.scout_rolls[player.id][chosen_location.name]
+            else:
+                base_roll = chosen_location.roll_points()
+
+            # Apply event point modifiers
+            location_points = self.event_manager.apply_point_modifier(chosen_location, base_roll)
+
             # Check for event effects
             special_effect = self.event_manager.get_special_effect(chosen_location)
 
@@ -357,28 +376,28 @@ class GameEngine:
                 import random
                 if random.random() < 0.3:  # 30% chance
                     caught = True
-                    ui.console.print(f"\n[red]⚠️ Silent Alarm! {player.name} was caught![/red]")
+                    ui.console.print(f"\n[red]⚠️ Silent Alarm! [{player.color}]{player.name}[/{player.color}] was caught![/red]")
 
             # Check for immunity event
             if special_effect == "immunity" and caught:
                 # Immunity event - auto-escape with full points
-                ui.console.print(f"\n[green]🛡️ Insurance Active! {player.name} slips away undetected![/green]")
+                ui.console.print(f"\n[green]🛡️ Insurance Active! [{player.color}]{player.name}[/{player.color}] slips away undetected![/green]")
                 caught = False  # Override caught status
 
             if caught:
-                # Player caught - trigger hide/run mechanic
-                hide_run_result = self.handle_hide_or_run(player, chosen_location, search_location)
+                # Player caught - trigger hide/run mechanic (pass location_points)
+                hide_run_result = self.handle_hide_or_run(player, chosen_location, search_location, location_points)
 
                 if hide_run_result['escaped']:
                     # Player escaped! Still alive
                     player.alive = True
-                    ui.print_escape_success(player, hide_run_result)
+                    ui.print_escape_success(player, hide_run_result, search_location)
                     player.record_choice(chosen_location, self.round_num, caught=False,
                                        points_earned=hide_run_result.get('points_awarded', 0))
                 else:
                     # Failed to escape - eliminated
                     player.alive = False
-                    ui.print_escape_failure(player, hide_run_result)
+                    ui.print_escape_failure(player, hide_run_result, search_location)
                     player.record_choice(chosen_location, self.round_num, caught=True, points_earned=0)
 
                     # Show post-game report
@@ -388,32 +407,22 @@ class GameEngine:
                 # Record hide/run attempt for AI learning
                 player.record_hide_run_attempt(hide_run_result, self.round_num)
             else:
-                # Player successfully looted
-                # Roll individual points for this player
-                # Check if this player used Scout and has a cached roll
-                if player.id in self.scout_rolls and chosen_location.name in self.scout_rolls[player.id]:
-                    base_roll = self.scout_rolls[player.id][chosen_location.name]
-                else:
-                    base_roll = chosen_location.roll_points()
-
-                # Apply event point modifiers
-                points_earned = self.event_manager.apply_point_modifier(chosen_location, base_roll)
-
+                # Player successfully looted - award points
                 # Show event effect if points were modified
-                if points_earned != base_roll:
+                if location_points != base_roll:
                     event = self.event_manager.get_location_event(chosen_location)
                     if event:
                         ui.console.print(
                             f"  {event.emoji} [cyan]{event.name}:[/cyan] "
-                            f"{base_roll} → {points_earned} points"
+                            f"{base_roll} → {location_points} points"
                         )
 
-                player.add_points(points_earned)
-                ui.print_player_looted(player, chosen_location, points_earned)
+                player.add_points(location_points)
+                ui.print_player_looted(player, chosen_location, location_points)
 
                 # Record choice for AI learning
                 player.record_choice(chosen_location, self.round_num, caught=False,
-                                   points_earned=points_earned, location_value=base_roll)
+                                   points_earned=location_points, location_value=base_roll)
 
         ui.console.print()
         ui.print_standings(self.players)
@@ -645,7 +654,7 @@ class GameEngine:
         return count
 
     def handle_hide_or_run(self, player: Player, caught_location: Location,
-                          search_location: Location) -> Dict[str, any]:
+                          search_location: Location, location_points: int) -> Dict[str, any]:
         """
         Handle the hide or run decision when player is caught.
 
@@ -653,6 +662,7 @@ class GameEngine:
             player: Player who was caught
             caught_location: Location where player was caught
             search_location: Location AI searched
+            location_points: Points rolled at this location
 
         Returns:
             Dict with choice, escaped, points_awarded, hide_spot_id, ai_threat_level, success_chance
@@ -669,7 +679,7 @@ class GameEngine:
         if choice_type == 'hide':
             return self._handle_hide_attempt(player, caught_location, ai_threat)
         else:  # 'run'
-            return self._handle_run_attempt(player, caught_location, ai_threat)
+            return self._handle_run_attempt(player, caught_location, ai_threat, location_points)
 
     def _handle_hide_attempt(self, player: Player, location: Location,
                             ai_threat: float) -> Dict[str, any]:
@@ -718,14 +728,18 @@ class GameEngine:
         }
 
     def _handle_run_attempt(self, player: Player, location: Location,
-                           ai_threat: float) -> Dict[str, any]:
+                           ai_threat: float, location_points: int) -> Dict[str, any]:
         """Handle running attempt with AI-adjusted escape chance."""
-        # Calculate base escape chance and points
+        # Calculate base escape chance
         escape_chance = self.hiding_manager.calculate_run_escape_chance(player, ai_threat)
-        points_retained = int(player.points * self.hiding_manager.get_run_point_retention())
+
+        # Calculate 80% of LOCATION points only
+        retention_rate = self.hiding_manager.get_run_point_retention()  # 0.8
+        location_points_retained = int(location_points * retention_rate)
+        points_after_escape = player.points + location_points_retained
 
         # Show run option with calculated chances
-        confirmed = ui.confirm_run_attempt(player, escape_chance, points_retained)
+        confirmed = ui.confirm_run_attempt(player, escape_chance, points_after_escape, location_points)
 
         if not confirmed:
             # Player changed mind - go back to hide choice
@@ -748,8 +762,11 @@ class GameEngine:
 
         # Calculate points - only keep if escaped
         if escaped:
-            # Player keeps 80% of points (loses 20%)
-            player.points = points_retained
+            # Add 80% of location points to total
+            player.points += location_points_retained
+        else:
+            # Failed to escape - don't add any location points (lose them all)
+            pass
 
         return {
             'choice': 'run',
@@ -759,6 +776,6 @@ class GameEngine:
             'hide_spot_name': None,
             'ai_threat_level': ai_threat,
             'success_chance': escape_chance,
-            'points_retained': points_retained if escaped else 0,
+            'points_retained': location_points_retained if escaped else 0,
             'item_effects': item_effects
         }

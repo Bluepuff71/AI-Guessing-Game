@@ -4,6 +4,10 @@ from game.items import Item, ItemType
 from game.locations import Location
 
 
+# Color palette for players
+PLAYER_COLORS = ["green", "cyan", "yellow", "magenta", "red", "blue", "bright_green", "bright_cyan"]
+
+
 class Player:
     """Represents a player in the game."""
 
@@ -11,6 +15,7 @@ class Player:
         self.id = player_id
         self.name = name
         self.profile_id = profile_id  # UUID of player's profile (None for guests)
+        self.color = PLAYER_COLORS[player_id % len(PLAYER_COLORS)]  # Assign unique color
         self.points = 0
         self.alive = True
         self.items: List[Item] = []

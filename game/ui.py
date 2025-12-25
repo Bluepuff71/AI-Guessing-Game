@@ -70,7 +70,7 @@ def print_standings(players: List[Player], player_choices: Dict[Player, Location
 
         row = [
             f"{i}.",
-            player.name,
+            f"[{player.color}]{player.name}[/{player.color}]",
             str(player.points),
             items_str
         ]
@@ -255,7 +255,7 @@ def print_player_choice(player: Player, location: Location, predicted_location: 
     """Print a player's choice and AI's prediction."""
     points_to_win = max(0, 100 - player.points)
 
-    console.print(f"[bold]{player.name}[/bold] ({player.points} pts{f', {points_to_win} pts to win' if points_to_win <= 20 else ''}):")
+    console.print(f"[bold {player.color}]{player.name}[/bold {player.color}] ({player.points} pts{f', {points_to_win} pts to win' if points_to_win <= 20 else ''}):")
     console.print(f"  Chose: [green]{location.emoji} {location.name}[/green] ({location.get_range_str()} pts)")
     console.print(f"  AI Predicted: [yellow]{predicted_location}[/yellow] ({confidence:.0%} confidence)")
     console.print(f"  Reasoning: \"{reasoning}\"")
@@ -280,25 +280,25 @@ def print_search_result(location: Location, previous_location: Location = None, 
 def print_player_caught(player: Player, shield_saved: bool = False):
     """Print that a player was caught."""
     if shield_saved:
-        console.print(f"[yellow]💀 {player.name} was caught![/yellow]")
-        console.print(f"[green]   Shield activated! {player.name} survives but gains 0 points.[/green]")
-        console.print(f"[dim]   {player.name}'s Shield is consumed.[/dim]")
+        console.print(f"[yellow]💀 [{player.color}]{player.name}[/{player.color}] was caught![/yellow]")
+        console.print(f"[green]   Shield activated! [{player.color}]{player.name}[/{player.color}] survives but gains 0 points.[/green]")
+        console.print(f"[dim]   [{player.color}]{player.name}[/{player.color}]'s Shield is consumed.[/dim]")
     else:
-        console.print(f"[bold red]💀 {player.name} was caught! ELIMINATED[/bold red]")
+        console.print(f"[bold red]💀 [{player.color}]{player.name}[/{player.color}] was caught! ELIMINATED[/bold red]")
         console.print(f"[dim]   Final score: {player.points} pts[/dim]")
     console.print()
 
 
 def print_player_looted(player: Player, location: Location, points_earned: int):
     """Print that a player successfully looted."""
-    console.print(f"[green]✅ {player.name} looted {location.name}: +{points_earned} pts ({player.points} total)[/green]")
+    console.print(f"[green]✅ [{player.color}]{player.name}[/{player.color}] looted {location.name}: +{points_earned} pts ({player.points} total)[/green]")
 
 
 def print_game_over(winner: Player):
     """Print game over message."""
     console.print()
     console.print("[bold green]" + "=" * 50 + "[/bold green]")
-    console.print(f"[bold green]🎉 {winner.name} WINS with {winner.points} points! 🎉[/bold green]")
+    console.print(f"[bold green]🎉 [{winner.color}]{winner.name}[/{winner.color}] WINS with {winner.points} points! 🎉[/bold green]")
     console.print("[bold green]" + "=" * 50 + "[/bold green]")
     console.print()
 
@@ -315,7 +315,7 @@ def print_ai_victory():
 def print_post_game_report(player: Player, insights: Dict[str, Any]):
     """Print detailed post-game report for eliminated/finished player."""
     console.print()
-    console.print(f"[bold cyan]📊 {player.name.upper()}'S POST-GAME REPORT[/bold cyan]")
+    console.print(f"[bold cyan]📊 [{player.color}]{player.name.upper()}[/{player.color}]'S POST-GAME REPORT[/bold cyan]")
     console.print()
 
     # Game performance
@@ -549,7 +549,7 @@ def print_caught_message(player, location):
     """Display dramatic caught message."""
     console.print()
     console.print("[bold red]" + "=" * 60 + "[/bold red]")
-    console.print(f"[bold red]🚨 {player.name} WAS CAUGHT at {location.emoji} {location.name}! 🚨[/bold red]")
+    console.print(f"[bold red]🚨 [{player.color}]{player.name}[/{player.color}] WAS CAUGHT at {location.emoji} {location.name}! 🚨[/bold red]")
     console.print("[bold red]" + "=" * 60 + "[/bold red]")
     console.print()
     console.print("[yellow]But all is not lost...[/yellow]")
@@ -568,7 +568,7 @@ def get_hide_or_run_choice(player, location, ai_threat: float) -> str:
     Returns:
         'hide' or 'run'
     """
-    console.print(f"[bold cyan]What will you do, {player.name}?[/bold cyan]\n")
+    console.print(f"[bold cyan]What will you do, [{player.color}]{player.name}[/{player.color}]?[/bold cyan]\n")
 
     # Show threat level
     threat_bar = "█" * int(ai_threat * 10) + "░" * (10 - int(ai_threat * 10))
@@ -642,21 +642,24 @@ def select_hiding_spot(hiding_spots: list, player) -> dict:
         console.print(f"[red]Invalid choice. Enter 1-{len(hiding_spots)}.[/red]")
 
 
-def confirm_run_attempt(player, escape_chance: float, points_retained: int) -> bool:
+def confirm_run_attempt(player, escape_chance: float, points_after_escape: int, location_points: int) -> bool:
     """
     Show run details and confirm choice.
 
     Args:
         player: Player attempting to run
         escape_chance: Calculated escape probability
-        points_retained: Points they'll keep if successful
+        points_after_escape: Total points if escape succeeds
+        location_points: Points earned at this location
 
     Returns:
         True if confirmed, False if player wants to hide instead
     """
     console.print(f"\n[bold yellow]Run Attempt Details:[/bold yellow]")
     console.print(f"  Current points: [yellow]{player.points}[/yellow]")
-    console.print(f"  Points if escaped: [green]{points_retained}[/green] (lose {player.points - points_retained})")
+    console.print(f"  Location points earned: [yellow]{location_points}[/yellow]")
+    console.print(f"  Points if escaped: [green]{points_after_escape}[/green] (keep 80% of location points)")
+    console.print(f"  Points if caught: [red]{player.points}[/red] (lose all location points)")
 
     # Color code based on chance
     if escape_chance > 0.6:
@@ -673,33 +676,43 @@ def confirm_run_attempt(player, escape_chance: float, points_retained: int) -> b
     return choice in ['y', 'yes']
 
 
-def print_escape_success(player, result: dict):
+def print_escape_success(player, result: dict, search_location=None):
     """Print successful escape message."""
     console.print()
 
     if result['choice'] == 'hide':
-        console.print(f"[bold green]✅ {player.name} successfully hid in {result['hide_spot_name']}![/bold green]")
+        console.print(f"[bold green]✅ [{player.color}]{player.name}[/{player.color}] successfully hid in {result['hide_spot_name']}![/bold green]")
         console.print(f"[green]The AI didn't find you! (Success chance was {result['success_chance']:.0%})[/green]")
         console.print(f"[yellow]Points: {player.points} (no points earned from hiding)[/yellow]")
     else:  # run
-        console.print(f"[bold green]✅ {player.name} successfully escaped![/bold green]")
+        console.print(f"[bold green]✅ [{player.color}]{player.name}[/{player.color}] successfully escaped![/bold green]")
         console.print(f"[green]You got away! (Escape chance was {result['success_chance']:.0%})[/green]")
         console.print(f"[yellow]Points retained: {result['points_retained']} (lost 20%)[/yellow]")
+
+    # Reveal where AI searched
+    if search_location:
+        console.print()
+        console.print(f"[cyan]🔍 The AI searched {search_location.emoji} {search_location.name} looking for you![/cyan]")
 
     console.print()
     console.input("[dim]Press Enter to continue...[/dim]")
 
 
-def print_escape_failure(player, result: dict):
+def print_escape_failure(player, result: dict, search_location=None):
     """Print failed escape message."""
     console.print()
 
     if result['choice'] == 'hide':
-        console.print(f"[bold red]❌ The AI found {player.name} hiding in {result['hide_spot_name']}![/bold red]")
+        console.print(f"[bold red]❌ The AI found [{player.color}]{player.name}[/{player.color}] hiding in {result['hide_spot_name']}![/bold red]")
         console.print(f"[red]Your hiding spot was discovered! (Success chance was {result['success_chance']:.0%})[/red]")
     else:  # run
-        console.print(f"[bold red]❌ {player.name} was caught while trying to escape![/bold red]")
+        console.print(f"[bold red]❌ [{player.color}]{player.name}[/{player.color}] was caught while trying to escape![/bold red]")
         console.print(f"[red]The AI tracked you down! (Escape chance was {result['success_chance']:.0%})[/red]")
+
+    # Reveal where AI searched
+    if search_location:
+        console.print()
+        console.print(f"[cyan]🔍 The AI was searching {search_location.emoji} {search_location.name}![/cyan]")
 
     console.print(f"[dim]Final score: {player.points} pts[/dim]")
     console.print("[bold red]ELIMINATED[/bold red]")

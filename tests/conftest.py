@@ -70,6 +70,12 @@ def temp_config_dir(tmp_path, monkeypatch):
                 "name": "Scout",
                 "cost": 6,
                 "description": "Preview loot rolls before choosing (single use)"
+            },
+            {
+                "id": "smoke_bomb",
+                "name": "Smoke Bomb",
+                "cost": 12,
+                "description": "If caught, +25% success to next hide/run attempt (single use)"
             }
         ]
     }

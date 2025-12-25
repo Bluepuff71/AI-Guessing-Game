@@ -320,9 +320,10 @@ def _check_win_streak(profile, streak_length: int) -> bool:
 
 def _check_all_locations_visited(profile) -> bool:
     """Check if player has visited all locations."""
-    # This requires knowledge of total locations - we'll check if they have 5+ unique locations
-    # (Assuming the game has ~5-8 locations based on config)
-    return len(profile.behavioral_stats.location_frequencies) >= 5
+    from game.config_loader import config
+    locations_data = config.get_locations()
+    total_locations = len(locations_data)
+    return len(profile.behavioral_stats.location_frequencies) >= total_locations
 
 
 def _check_comeback(profile) -> bool:

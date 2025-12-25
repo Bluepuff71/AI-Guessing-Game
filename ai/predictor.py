@@ -425,9 +425,7 @@ class AIPredictor:
         elif features['risk_trend'] < 0 and location_value < 15:
             score += 3  # Decreasing risk
 
-        # Factor 5: Lucky Charm usage (doubled points means higher value targets)
-        if features['has_lucky_charm'] and location_value >= 15:
-            score += 7
+        # Factor 5: (removed Lucky Charm - item no longer exists)
 
         # Factor 6: Avoid recently searched locations (slight penalty)
         # TODO: Track AI's recent searches and penalize
@@ -454,10 +452,6 @@ class AIPredictor:
             reasons.append("escalating risk pattern")
         elif features['risk_trend'] < 0:
             reasons.append("becoming more conservative")
-
-        # Items
-        if features['has_lucky_charm']:
-            reasons.append("has Lucky Charm (likely targeting high-value)")
 
         # Predictability
         predictability = calculate_predictability(player)
@@ -667,18 +661,7 @@ class AIPredictor:
         if player.points >= win_proximity_threshold:
             points_threat = 0.8 + (player.points - win_proximity_threshold) / win_threshold  # 0.8-1.0 range
 
-        # Secondary factor: has Lucky Charm (could double points)
-        has_lucky_charm = any(item.name == "Lucky Charm" and not item.consumed
-                             for item in player.items)
-
-        if has_lucky_charm:
-            # If they have lucky charm and could potentially win this round
-            # (assuming they go for Bank Vault = 35 pts * 2 = 70 pts)
-            lucky_charm_win_threshold = int(win_threshold * 0.3)
-            if player.points >= lucky_charm_win_threshold:
-                points_threat = min(1.0, points_threat + 0.3)
-
-        # Tertiary factor: predictability (easier to catch)
+        # Secondary factor: predictability (easier to catch)
         predictability = calculate_predictability(player)
         catch_likelihood = predictability * 0.2
 

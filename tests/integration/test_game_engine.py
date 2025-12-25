@@ -123,7 +123,25 @@ class TestRevealAndResolvePhase:
 
         # Mock console.input for "Press Enter to continue" prompt
         import game.ui
+        import game.engine
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Mock hide_or_run to simulate failed escape (player eliminated)
+        def mock_handle_hide_or_run(self, player, caught_location, search_location, location_points):
+            """Mock that simulates failed escape attempt - player eliminated."""
+            player.alive = False
+            return {
+                'choice': 'hide',
+                'escaped': False,
+                'points_awarded': 0,
+                'hide_spot_id': 'test_spot',
+                'hide_spot_name': 'Test Hiding Spot',
+                'ai_threat_level': 0.8,
+                'success_chance': 0.3,
+                'item_effects': []
+            }
+
+        monkeypatch.setattr(game.engine.GameEngine, 'handle_hide_or_run', mock_handle_hide_or_run)
 
         # Create choice where AI searches same location
         loc1 = game_engine.location_manager.get_location(0)
@@ -300,6 +318,7 @@ class TestEventSystem:
         """Test events can be generated during play_round."""
         # Mock console.input for all prompts
         import game.ui
+        import game.engine
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
 
         # Mock location choice
@@ -309,6 +328,22 @@ class TestEventSystem:
 
         # Mock shop phase (skip)
         monkeypatch.setattr(game_engine, 'shop_phase', lambda player: None)
+
+        # Mock hide_or_run to prevent hanging when players are caught
+        def mock_handle_hide_or_run(self, player, caught_location, search_location, location_points):
+            """Mock that simulates failed escape (player eliminated)."""
+            player.alive = False
+            return {
+                'choice': 'hide',
+                'escaped': False,
+                'points_awarded': 0,
+                'hide_spot_id': 'test_spot',
+                'hide_spot_name': 'Test Hiding Spot',
+                'ai_threat_level': 0.8,
+                'success_chance': 0.3,
+                'item_effects': []
+            }
+        monkeypatch.setattr(game.engine.GameEngine, 'handle_hide_or_run', mock_handle_hide_or_run)
 
         # Round 3 should trigger event generation (every 3 rounds)
         game_engine.round_num = 2  # Will become 3 in play_round
