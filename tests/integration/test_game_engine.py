@@ -994,6 +994,97 @@ class TestGuaranteedCatchEvent:
         # The guaranteed catch should have been triggered for player1
         # (but only 30% of the time, which we forced with random mock)
 
+    def test_guaranteed_catch_with_high_roller_passive(self, game_engine, monkeypatch, temp_passives_config, temp_config_dir):
+        """Test guaranteed catch event works when player has High Roller passive.
+
+        This is a regression test for a bug where a local 'import random' in the
+        guaranteed_catch code path caused an UnboundLocalError when High Roller's
+        random.random() call was reached first.
+        """
+        from game.passives import PassiveShop, PassiveType
+        from game.config_loader import ConfigLoader
+        from game.events import Event
+        import game.ui
+        import game.engine
+        import game.config_loader
+        import random
+
+        # Force reload config to pick up passives.json created by temp_passives_config
+        ConfigLoader._instance = None
+        PassiveShop.PASSIVES = None
+        new_config = ConfigLoader()
+        monkeypatch.setattr(game.config_loader, 'config', new_config)
+
+        player1 = game_engine.players[0]
+        player2 = game_engine.players[1]
+        player1.points = 50
+        player2.points = 50
+
+        # Give player1 High Roller passive
+        passive = PassiveShop.get_passive(PassiveType.HIGH_ROLLER)
+        if not passive:
+            pytest.skip("High Roller passive not available")
+
+        player1.passive_manager.add_passive(passive)
+
+        # Mock console
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Setup locations:
+        # - loc_store (index 0): Player2 goes here, has guaranteed_catch event
+        # - loc_vault (index 1): Player1 with High Roller goes here (bonus location)
+        # - loc_bank (index 2): AI searches here (no one there)
+        loc_store = game_engine.location_manager.get_location(0)  # Test Store
+        loc_vault = game_engine.location_manager.get_location(1)  # Test Vault (High Roller bonus)
+        loc_bank = game_engine.location_manager.get_location(2)   # Test Bank
+
+        # Verify loc_vault is a bonus location for High Roller
+        bonus_locations = passive.get_effect('bonus_locations', [])
+        if loc_vault.name not in bonus_locations:
+            pytest.skip(f"Test Vault not in High Roller bonus locations: {bonus_locations}")
+
+        # Create guaranteed catch event on loc_store (where player2 will be)
+        dragnet = Event(
+            id="dragnet",
+            name="DRAGNET",
+            description="Silent alarms everywhere!",
+            emoji="🚔",
+            duration_rounds=1,
+            special_effect="guaranteed_catch"
+        )
+        game_engine.event_manager.active_events.append(dragnet.copy_with_location(loc_store))
+
+        # Mock random - first call is High Roller bust check, subsequent for guaranteed catch
+        random_calls = []
+        def mock_random():
+            random_calls.append(1)
+            return 0.5  # Won't bust (> 0.15), won't trigger catch (> 0.3)
+
+        monkeypatch.setattr(random, 'random', mock_random)
+
+        # Mock handle_hide_or_run in case someone gets caught
+        def mock_handle_hide_or_run(self, player, caught_loc, search_loc, points):
+            player.alive = False
+            return {'escaped': False, 'points_awarded': 0, 'player_choice_id': 'test',
+                    'ai_prediction_id': 'test', 'choice_type': 'hide'}, []
+
+        monkeypatch.setattr(game.engine.GameEngine, 'handle_hide_or_run', mock_handle_hide_or_run)
+
+        # Player1 at High Roller bonus location, Player2 at guaranteed_catch location
+        player_choices = {player1: loc_vault, player2: loc_store}
+        predictions = {
+            player1: (loc_store.name, 0.5, "Wrong prediction"),
+            player2: (loc_vault.name, 0.5, "Wrong prediction")
+        }
+
+        # AI searches loc_bank (neither player is there)
+        # This triggers: High Roller check for player1, guaranteed_catch check for player2
+        # Before the fix, this raised UnboundLocalError
+        game_engine.reveal_and_resolve_phase(player_choices, loc_bank, predictions, "Test")
+
+        # Verify random was called (High Roller triggers random check)
+        assert len(random_calls) > 0, "random.random() should have been called for High Roller"
+
 
 class TestImmunityEventMessage:
     """Tests for immunity event messaging."""
