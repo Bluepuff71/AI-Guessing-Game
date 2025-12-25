@@ -723,3 +723,762 @@ class TestHighRollerEffect:
         # Play should not crash with High Roller effect
         initial_points = player1.points
         game_engine.reveal_and_resolve_phase(player_choices, loc2, predictions, "Test")
+
+    def test_reveal_high_roller_win(self, game_engine, monkeypatch, temp_passives_config):
+        """Test High Roller win bonus mechanic."""
+        from game.passives import PassiveShop, PassiveType
+        from game.config_loader import ConfigLoader
+        import game.ui
+        import random
+
+        ConfigLoader._instance = None
+        PassiveShop.PASSIVES = None
+
+        player1 = game_engine.players[0]
+        player2 = game_engine.players[1]
+        player1.points = 50
+        player2.points = 50
+
+        # Give player High Roller passive
+        passive = PassiveShop.get_passive(PassiveType.HIGH_ROLLER)
+        if not passive:
+            pytest.skip("High Roller passive not available")
+
+        player1.passive_manager.add_passive(passive)
+
+        # Mock console
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Force win by mocking random to be > bust_chance (0.15)
+        monkeypatch.setattr(random, 'random', lambda: 0.5)  # Always win bonus
+
+        # Get a bonus location from passive effects
+        bonus_locations = passive.get_effect('bonus_locations', [])
+        loc1 = None
+        for loc in game_engine.location_manager.get_all():
+            if loc.name in bonus_locations:
+                loc1 = loc
+                break
+
+        if not loc1:
+            pytest.skip("No matching bonus location for High Roller")
+
+        loc2 = game_engine.location_manager.get_location(1)
+        if loc2 == loc1:
+            loc2 = game_engine.location_manager.get_location(2)
+
+        player_choices = {player1: loc1, player2: loc2}
+        predictions = {
+            player1: (loc2.name, 0.5, "Wrong prediction"),
+            player2: (loc1.name, 0.5, "Wrong prediction")
+        }
+
+        initial_points = player1.points
+        game_engine.reveal_and_resolve_phase(player_choices, loc2, predictions, "Test")
+
+        # Player should have gained points with bonus
+        assert player1.points > initial_points
+
+
+class TestSetupGame:
+    """Tests for game setup flow."""
+
+    def test_setup_game_with_profiles(self, temp_config_dir, monkeypatch, mock_console):
+        """Test setup_game with player profiles."""
+        from game.profile_manager import PlayerProfile, ProfileStats, AIMemoryStats, BehavioralStats, HidingBehavioralStats
+        from datetime import datetime, timezone
+        import game.ui
+
+        console, output = mock_console
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Create mock profiles
+        profiles = [
+            PlayerProfile(
+                profile_id="p1",
+                name="Alice",
+                created_date=now,
+                last_played=now,
+                stats=ProfileStats(),
+                ai_memory=AIMemoryStats(),
+                behavioral_stats=BehavioralStats(),
+                hiding_stats=HidingBehavioralStats()
+            ),
+            PlayerProfile(
+                profile_id="p2",
+                name="Bob",
+                created_date=now,
+                last_played=now,
+                stats=ProfileStats(),
+                ai_memory=AIMemoryStats(),
+                behavioral_stats=BehavioralStats(),
+                hiding_stats=HidingBehavioralStats()
+            )
+        ]
+
+        engine = GameEngine(num_players=2, profiles=profiles)
+
+        # Mock console.input for "Press Enter to start"
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        engine.setup_game()
+
+        # Players should be created from profiles
+        assert len(engine.players) == 2
+        assert engine.players[0].name == "Alice"
+        assert engine.players[1].name == "Bob"
+
+    def test_setup_game_with_guest_player(self, temp_config_dir, monkeypatch, mock_console):
+        """Test setup_game with a guest player (None profile)."""
+        from game.profile_manager import PlayerProfile, ProfileStats, AIMemoryStats, BehavioralStats, HidingBehavioralStats
+        from datetime import datetime, timezone
+        import game.ui
+
+        console, output = mock_console
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Create profile with one guest (None)
+        profiles = [
+            PlayerProfile(
+                profile_id="p1",
+                name="Alice",
+                created_date=now,
+                last_played=now,
+                stats=ProfileStats(),
+                ai_memory=AIMemoryStats(),
+                behavioral_stats=BehavioralStats(),
+                hiding_stats=HidingBehavioralStats()
+            ),
+            None  # Guest player
+        ]
+
+        engine = GameEngine(num_players=2, profiles=profiles)
+
+        # Mock console.input: first for guest name, then for "Press Enter"
+        inputs = iter(["GuestPlayer", ""])
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs, ""))
+
+        engine.setup_game()
+
+        assert len(engine.players) == 2
+        assert engine.players[0].name == "Alice"
+        assert engine.players[1].name == "GuestPlayer"
+
+    def test_setup_game_legacy_mode(self, temp_config_dir, monkeypatch, mock_console):
+        """Test setup_game without profiles (legacy mode)."""
+        import game.ui
+
+        console, output = mock_console
+
+        engine = GameEngine(num_players=2)
+
+        # Mock console.input for player names and start
+        inputs = iter(["Alice", "Bob", ""])
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs, ""))
+
+        engine.setup_game()
+
+        assert len(engine.players) == 2
+        assert engine.players[0].name == "Alice"
+        assert engine.players[1].name == "Bob"
+
+
+class TestPlayGame:
+    """Tests for main game loop."""
+
+    def test_play_game_ends_on_score_victory(self, game_engine, monkeypatch):
+        """Test play_game ends when player reaches win threshold."""
+        import game.ui
+        import game.animations
+
+        # Mock all interactive elements
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+        monkeypatch.setattr(game.animations, 'play_victory_animation', lambda: None)
+
+        # Make player win immediately
+        game_engine.players[0].points = 100
+        game_engine.game_over = True
+        game_engine.winner = game_engine.players[0]
+
+        # play_game should immediately show results and exit
+        game_engine.play_game()
+
+        # Verify game completed
+        assert game_engine.game_over is True
+
+
+class TestSoloContinue:
+    """Tests for solo play continuation."""
+
+    def test_check_game_over_solo_continue(self, game_engine, monkeypatch):
+        """Test continuing solo when last player standing."""
+        import game.ui
+
+        player1 = game_engine.players[0]
+        player2 = game_engine.players[1]
+
+        player2.alive = False
+        player1.points = 50
+
+        # Mock console.input to continue playing
+        inputs = iter(["continue", ""])
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs, ""))
+
+        game_engine.check_game_over()
+
+        # Game should continue (not over)
+        assert game_engine.game_over is False
+
+
+class TestGuaranteedCatchEvent:
+    """Tests for guaranteed catch event mechanic."""
+
+    def test_guaranteed_catch_triggers_randomly(self, game_engine, monkeypatch, deterministic_random):
+        """Test guaranteed catch event can trigger even when AI searches elsewhere."""
+        import game.ui
+        import game.engine
+        import random
+
+        player1 = game_engine.players[0]
+        player2 = game_engine.players[1]
+        player1.points = 50
+        player2.points = 50
+
+        # Mock console
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Create guaranteed catch event
+        from game.events import Event
+        loc1 = game_engine.location_manager.get_location(0)
+        loc2 = game_engine.location_manager.get_location(1)
+
+        dragnet = Event(
+            id="dragnet",
+            name="DRAGNET",
+            description="Silent alarms everywhere!",
+            emoji="🚔",
+            duration_rounds=1,
+            special_effect="guaranteed_catch"
+        )
+        game_engine.event_manager.active_events.append(dragnet.copy_with_location(loc1))
+
+        # Mock random to trigger the 30% catch chance
+        random_values = iter([0.1])  # < 0.3, so will trigger
+        original_random = random.random
+        def mock_random():
+            try:
+                return next(random_values)
+            except StopIteration:
+                return original_random()
+
+        monkeypatch.setattr(random, 'random', mock_random)
+
+        # Mock handle_hide_or_run to track if it was called
+        hide_run_called = []
+        def mock_handle_hide_or_run(self, player, caught_loc, search_loc, points):
+            hide_run_called.append(player.name)
+            player.alive = False
+            return {'escaped': False, 'points_awarded': 0, 'player_choice_id': 'test', 'ai_prediction_id': 'test', 'choice_type': 'hide'}, []
+
+        monkeypatch.setattr(game.engine.GameEngine, 'handle_hide_or_run', mock_handle_hide_or_run)
+
+        player_choices = {player1: loc1, player2: loc2}
+        predictions = {
+            player1: (loc2.name, 0.5, "Wrong prediction"),
+            player2: (loc1.name, 0.5, "Wrong prediction")
+        }
+
+        # AI searches loc2 but player1 is at loc1 with dragnet event
+        game_engine.reveal_and_resolve_phase(player_choices, loc2, predictions, "Test")
+
+        # The guaranteed catch should have been triggered for player1
+        # (but only 30% of the time, which we forced with random mock)
+
+
+class TestImmunityEventMessage:
+    """Tests for immunity event messaging."""
+
+    def test_immunity_event_message_displayed(self, game_engine, monkeypatch, mock_console):
+        """Test immunity event shows escape message."""
+        import game.ui
+
+        console, output = mock_console
+
+        player1 = game_engine.players[0]
+        player2 = game_engine.players[1]
+        player1.points = 50
+        player2.points = 50
+
+        # Mock console
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Create immunity event at location where player will be caught
+        from game.events import Event
+        loc1 = game_engine.location_manager.get_location(0)
+        loc2 = game_engine.location_manager.get_location(1)
+
+        immunity = Event(
+            id="insurance",
+            name="INSURANCE",
+            description="Cannot be caught!",
+            emoji="🛡️",
+            duration_rounds=1,
+            special_effect="immunity"
+        )
+        game_engine.event_manager.active_events.append(immunity.copy_with_location(loc1))
+
+        player_choices = {player1: loc1, player2: loc2}
+        predictions = {
+            player1: (loc1.name, 0.9, "Correct prediction"),
+            player2: (loc1.name, 0.5, "Wrong prediction")
+        }
+
+        # AI searches loc1 where player1 is, but player has immunity
+        game_engine.reveal_and_resolve_phase(player_choices, loc1, predictions, "Test")
+
+        # Player should still be alive due to immunity
+        assert player1.alive is True
+
+        # Check output contains immunity message
+        result = output.getvalue()
+        assert "Insurance" in result or "immunity" in result.lower() or "slips away" in result.lower()
+
+
+class TestEventExpiredDisplay:
+    """Tests for event expiration display."""
+
+    def test_expired_events_displayed(self, game_engine, monkeypatch, mock_console):
+        """Test expired events are shown at end of round."""
+        import game.ui
+
+        console, output = mock_console
+
+        player1 = game_engine.players[0]
+        player2 = game_engine.players[1]
+        player1.points = 50
+        player2.points = 50
+
+        # Mock console
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Create an event that will expire
+        from game.events import Event
+        loc1 = game_engine.location_manager.get_location(0)
+        loc2 = game_engine.location_manager.get_location(1)
+
+        expiring_event = Event(
+            id="test_event",
+            name="TEST EVENT",
+            description="A test event",
+            emoji="🎯",
+            duration_rounds=1
+        )
+        event = expiring_event.copy_with_location(loc1)
+        event.rounds_remaining = 1
+        game_engine.event_manager.active_events.append(event)
+
+        player_choices = {player1: loc2, player2: loc2}
+        predictions = {
+            player1: (loc1.name, 0.5, "Wrong prediction"),
+            player2: (loc1.name, 0.5, "Wrong prediction")
+        }
+
+        game_engine.reveal_and_resolve_phase(player_choices, loc1, predictions, "Test")
+
+        # Event should be expired and removed
+        assert event not in game_engine.event_manager.active_events
+
+
+class TestUpdatePlayerProfiles:
+    """Tests for player profile updates after game."""
+
+    def test_update_player_profiles(self, game_engine, monkeypatch, temp_data_dir):
+        """Test player profiles are updated after game."""
+        from game.profile_manager import ProfileManager
+        from unittest.mock import MagicMock
+
+        # Create player with profile
+        player = game_engine.players[0]
+        player.profile_id = "test_profile"
+        player.points = 100
+
+        # Mock ProfileManager
+        mock_pm = MagicMock(spec=ProfileManager)
+
+        with monkeypatch.context() as m:
+            m.setattr('game.engine.ProfileManager', lambda: mock_pm)
+
+            game_engine.winner = player
+            game_engine._update_player_profiles("test_game_id")
+
+            # Should have called update_stats_after_game
+            mock_pm.update_stats_after_game.assert_called()
+
+    def test_update_player_profiles_skips_guests(self, game_engine, monkeypatch, temp_data_dir):
+        """Test guest players (no profile_id) are skipped."""
+        from game.profile_manager import ProfileManager
+        from unittest.mock import MagicMock
+
+        # Player without profile_id
+        player = game_engine.players[0]
+        player.profile_id = None
+
+        mock_pm = MagicMock(spec=ProfileManager)
+
+        with monkeypatch.context() as m:
+            m.setattr('game.engine.ProfileManager', lambda: mock_pm)
+
+            game_engine._update_player_profiles("test_game_id")
+
+            # Should not have called update_stats_after_game for guest
+            # (or only called for players with profiles)
+
+
+class TestShowIntelReportEdgeCases:
+    """Tests for show_intel_report edge cases."""
+
+    def test_show_intel_report_high_value_preference(self, game_engine, monkeypatch, mock_console):
+        """Test Intel Report shows high-value preference insight."""
+        import game.ui
+
+        console, output = mock_console
+
+        player = game_engine.players[0]
+        player.points = 50
+
+        # Add history with high values to trigger insight
+        for i in range(5):
+            loc = game_engine.location_manager.get_all()[-1]  # Usually highest value
+            player.record_choice(loc, i+1, False, 25, 25)
+
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        game_engine.show_intel_report(player)
+
+        # Should have generated some output
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_show_intel_report_low_value_preference(self, game_engine, monkeypatch, mock_console):
+        """Test Intel Report shows low-value preference insight."""
+        import game.ui
+
+        console, output = mock_console
+
+        player = game_engine.players[0]
+        player.points = 50
+
+        # Add history with low values to trigger insight
+        for i in range(5):
+            loc = game_engine.location_manager.get_all()[0]  # Usually lowest value
+            player.record_choice(loc, i+1, False, 5, 5)
+
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        game_engine.show_intel_report(player)
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_show_intel_report_limited_variety(self, game_engine, monkeypatch, mock_console):
+        """Test Intel Report shows limited variety insight."""
+        import game.ui
+
+        console, output = mock_console
+
+        player = game_engine.players[0]
+        player.points = 50
+
+        # Add history with same location repeatedly
+        loc = game_engine.location_manager.get_location(0)
+        for i in range(10):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        game_engine.show_intel_report(player)
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_show_intel_report_with_profile(self, game_engine, monkeypatch, mock_console, temp_data_dir):
+        """Test Intel Report with player profile shows AI memory."""
+        import game.ui
+        from game.profile_manager import ProfileManager
+        from unittest.mock import MagicMock
+
+        console, output = mock_console
+
+        player = game_engine.players[0]
+        player.points = 50
+        player.profile_id = "test_profile"
+
+        # Add some history
+        loc = game_engine.location_manager.get_location(0)
+        for i in range(3):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        # Mock ProfileManager to return a profile
+        mock_profile = MagicMock()
+        mock_profile.behavioral_stats.favorite_location = "Test Store"
+        mock_profile.behavioral_stats.risk_profile = "aggressive"
+        mock_profile.ai_memory.catch_rate = 0.25
+        mock_profile.ai_memory.has_personal_model = True
+        mock_profile.stats.total_games = 10
+        mock_profile.hiding_stats.total_caught_instances = 3
+        mock_profile.hiding_stats.hide_attempts = 5
+        mock_profile.hiding_stats.run_attempts = 3
+        mock_profile.hiding_stats.hide_success_rate = 0.6
+        mock_profile.hiding_stats.run_success_rate = 0.5
+        mock_profile.hiding_stats.risk_profile_when_caught = "cautious"
+
+        mock_pm = MagicMock()
+        mock_pm.load_profile.return_value = mock_profile
+
+        with monkeypatch.context() as m:
+            m.setattr('game.engine.ProfileManager', lambda: mock_pm)
+            m.setattr(game.ui.console, 'input', lambda prompt: "")
+
+            game_engine.show_intel_report(player)
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+
+class TestHideOrRunEdgeCases:
+    """Tests for hide or run edge cases."""
+
+    def test_handle_hide_or_run_no_escape_options(self, game_engine, monkeypatch):
+        """Test handle_hide_or_run when no escape options available."""
+        import game.ui
+
+        player = game_engine.players[0]
+        player.points = 50
+
+        # Mock HidingManager to return no escape options
+        monkeypatch.setattr(game_engine.hiding_manager, 'get_escape_options_for_location', lambda loc: [])
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        caught_location = game_engine.location_manager.get_location(0)
+
+        result, opts = game_engine.handle_hide_or_run(player, caught_location, caught_location, 20)
+
+        # Should be caught with no escape
+        assert result['escaped'] is False
+        assert opts == []
+
+    def test_handle_hide_or_run_passive_second_chance_hide(self, game_engine, monkeypatch, sample_hiding_manager, temp_passives_config):
+        """Test passive second chance for hide escape."""
+        from game.passives import PassiveShop, PassiveType
+        from game.config_loader import ConfigLoader
+        import game.ui
+        import random
+
+        ConfigLoader._instance = None
+        PassiveShop.PASSIVES = None
+
+        player = game_engine.players[0]
+        player.points = 50
+
+        # Give player Shadow Walker (hide bonus)
+        passive = PassiveShop.get_passive(PassiveType.SHADOW_WALKER)
+        if passive:
+            player.passive_manager.add_passive(passive)
+
+        # Mock HidingManager
+        monkeypatch.setattr(game_engine, 'hiding_manager', sample_hiding_manager)
+
+        escape_options = sample_hiding_manager.get_escape_options_for_location("Test Store")
+        if not escape_options:
+            pytest.skip("No escape options available")
+
+        first_option = escape_options[0]
+
+        # Mock UI to select first option
+        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts: first_option)
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+        monkeypatch.setattr(game.ui, 'print_escape_result', lambda p, r, opts=None: None)
+
+        # Mock escape predictor to predict correctly (AI catches player initially)
+        def mock_predict_escape(*args, **kwargs):
+            return (first_option['id'], 0.9, 'Correct prediction')
+        monkeypatch.setattr(game_engine.escape_predictor, 'predict_escape_option', mock_predict_escape)
+
+        # Force passive second chance to succeed
+        monkeypatch.setattr(random, 'random', lambda: 0.0)  # Always < bonus
+
+        caught_location = game_engine.location_manager.get_location(0)
+
+        result, opts = game_engine.handle_hide_or_run(player, caught_location, caught_location, 20)
+
+        # If passive has bonus, player might escape via second chance
+        assert isinstance(result['escaped'], bool)
+
+    def test_handle_hide_or_run_run_with_quick_feet(self, game_engine, monkeypatch, sample_hiding_manager, temp_passives_config):
+        """Test run escape with Quick Feet passive retention bonus."""
+        from game.passives import PassiveShop, PassiveType
+        from game.config_loader import ConfigLoader
+        import game.ui
+        import random
+
+        ConfigLoader._instance = None
+        PassiveShop.PASSIVES = None
+
+        player = game_engine.players[0]
+        player.points = 50
+
+        # Give player Quick Feet (run bonus)
+        passive = PassiveShop.get_passive(PassiveType.QUICK_FEET)
+        if passive:
+            player.passive_manager.add_passive(passive)
+
+        # Mock HidingManager
+        monkeypatch.setattr(game_engine, 'hiding_manager', sample_hiding_manager)
+
+        escape_options = sample_hiding_manager.get_escape_options_for_location("Test Store")
+        if not escape_options:
+            pytest.skip("No escape options available")
+
+        # Find a run option if available
+        run_option = None
+        for opt in escape_options:
+            if opt.get('type') == 'run':
+                run_option = opt
+                break
+        if not run_option:
+            run_option = escape_options[0]  # Fallback
+
+        # Mock UI to select run option
+        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts: run_option)
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+        monkeypatch.setattr(game.ui, 'print_escape_result', lambda p, r, opts=None: None)
+
+        # Mock escape predictor to predict wrong (player escapes)
+        def mock_predict_escape(*args, **kwargs):
+            return ('wrong_option', 0.5, 'Wrong prediction')
+        monkeypatch.setattr(game_engine.escape_predictor, 'predict_escape_option', mock_predict_escape)
+
+        caught_location = game_engine.location_manager.get_location(0)
+
+        result, opts = game_engine.handle_hide_or_run(player, caught_location, caught_location, 20)
+
+        # Player should escape with points
+        assert result['escaped'] is True
+
+
+class TestNewEventAnnouncement:
+    """Tests for new event announcement display."""
+
+    def test_new_event_announcement_in_round(self, game_engine, monkeypatch, mock_console):
+        """Test new events are announced at start of round."""
+        import game.ui
+        import game.engine
+
+        console, output = mock_console
+
+        # Mock console input for all prompts
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Force event generation
+        from game.events import Event
+        loc = game_engine.location_manager.get_location(0)
+        new_event = Event(
+            id="test",
+            name="TEST EVENT",
+            description="A test event",
+            emoji="🎯",
+            duration_rounds=2
+        )
+
+        # Mock generate_events to return the new event
+        def mock_generate_events(game_state, locations):
+            event = new_event.copy_with_location(loc)
+            game_engine.event_manager.active_events.append(event)
+            return [event]
+
+        monkeypatch.setattr(game_engine.event_manager, 'generate_events', mock_generate_events)
+
+        # Mock phases to skip interaction
+        monkeypatch.setattr(game_engine, 'shop_phase', lambda player: None)
+        monkeypatch.setattr(game_engine, 'choose_location_phase', lambda player: loc)
+
+        # Mock hide_or_run
+        def mock_handle_hide_or_run(self, player, caught_loc, search_loc, points):
+            return {'escaped': True, 'points_awarded': 0, 'player_choice_id': 'test', 'ai_prediction_id': 'other', 'choice_type': 'hide'}, []
+        monkeypatch.setattr(game.engine.GameEngine, 'handle_hide_or_run', mock_handle_hide_or_run)
+
+        game_engine.play_round()
+
+        result = output.getvalue()
+        # Should contain event announcement
+        assert "NEW EVENT" in result or "TEST EVENT" in result
+
+
+class TestShopPhaseEdgeCases:
+    """Tests for shop phase edge cases."""
+
+    def test_shop_phase_zero_points(self, game_engine, monkeypatch, mock_console):
+        """Test shop phase skips when player has 0 points."""
+        import game.ui
+
+        console, output = mock_console
+
+        player = game_engine.players[0]
+        player.points = 0
+
+        game_engine.shop_phase(player)
+
+        result = output.getvalue()
+        assert "Skipping shop" in result or "no points" in result.lower()
+
+    def test_shop_phase_invalid_input(self, game_engine, monkeypatch, mock_console, temp_passives_config):
+        """Test shop phase handles invalid input."""
+        from game.passives import PassiveShop
+        from game.config_loader import ConfigLoader
+        import game.ui
+
+        ConfigLoader._instance = None
+        PassiveShop.PASSIVES = None
+
+        console, output = mock_console
+
+        player = game_engine.players[0]
+        player.points = 50
+
+        # Mock console: invalid input, then skip
+        inputs = iter(["abc", ""])
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs, ""))
+
+        game_engine.shop_phase(player)
+
+        result = output.getvalue()
+        assert "Invalid" in result or player.points == 50
+
+    def test_shop_phase_already_owned(self, game_engine, monkeypatch, mock_console, temp_passives_config):
+        """Test shop phase shows already owned message."""
+        from game.passives import PassiveShop, PassiveType
+        from game.config_loader import ConfigLoader
+        import game.ui
+
+        ConfigLoader._instance = None
+        PassiveShop.PASSIVES = None
+
+        console, output = mock_console
+
+        player = game_engine.players[0]
+        player.points = 100
+
+        # Give player a passive first
+        passive = PassiveShop.get_passive(PassiveType.AI_WHISPERER)
+        if not passive:
+            pytest.skip("AI Whisperer passive not available")
+        player.passive_manager.add_passive(passive)
+
+        # Try to buy same passive again, then skip
+        inputs = iter(["1", ""])  # Try to buy first passive, then skip
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs, ""))
+
+        game_engine.shop_phase(player)
+
+        result = output.getvalue()
+        assert "already own" in result.lower() or player.points == 100

@@ -780,3 +780,275 @@ class TestLocationPreferences:
 
         preferences = pm.get_location_preferences(profile)
         assert preferences == {'Bank Heist': 1.0}
+
+
+class TestProfileFromDictEdgeCases:
+    """Tests for PlayerProfile.from_dict edge cases."""
+
+    def test_from_dict_without_hiding_stats(self):
+        """Test from_dict adds hiding_stats for old profiles."""
+        data = {
+            'profile_id': "test-id",
+            'name': "OldPlayer",
+            'created_date': "2025-12-01T00:00:00Z",
+            'last_played': "2025-12-01T00:00:00Z",
+            'stats': {'total_games': 5, 'wins': 3, 'losses': 2, 'win_rate': 0.6,
+                     'highest_score': 95, 'total_points_earned': 0, 'times_caught': 0,
+                     'total_rounds_played': 0},
+            'behavioral_stats': {'favorite_location': 'Unknown',
+                                'location_frequencies': {}, 'risk_profile': 'neutral',
+                                'predictability_score': 0.5, 'avg_location_value': 0.0,
+                                'most_profitable_location': 'Unknown', 'item_usage': {}},
+            'ai_memory': {'times_predicted': 0, 'times_caught_by_ai': 0,
+                         'catch_rate': 0.0, 'prediction_accuracy': 0,
+                         'has_personal_model': False, 'model_trained_date': None},
+            'match_history': []
+            # Note: No 'hiding_stats' key
+        }
+
+        profile = PlayerProfile.from_dict(data)
+
+        # Should have default hiding stats
+        from game.profile_manager import HidingBehavioralStats
+        assert isinstance(profile.hiding_stats, HidingBehavioralStats)
+        assert profile.hiding_stats.total_caught_instances == 0
+
+    def test_from_dict_with_match_history_entries(self):
+        """Test from_dict converts match history entries."""
+        data = {
+            'profile_id': "test-id",
+            'name': "Bob",
+            'created_date': "2025-12-24T00:00:00Z",
+            'last_played': "2025-12-24T00:00:00Z",
+            'stats': {'total_games': 2, 'wins': 1, 'losses': 1, 'win_rate': 0.5,
+                     'highest_score': 100, 'total_points_earned': 150, 'times_caught': 1,
+                     'total_rounds_played': 20},
+            'behavioral_stats': {'favorite_location': 'Bank', 'location_frequencies': {'Bank': 5},
+                                'risk_profile': 'neutral', 'predictability_score': 0.5,
+                                'avg_location_value': 0.0, 'most_profitable_location': 'Bank',
+                                'item_usage': {}},
+            'hiding_stats': {'total_caught_instances': 2, 'total_escapes': 1,
+                            'hide_attempts': 1, 'run_attempts': 1,
+                            'hide_success_rate': 1.0, 'run_success_rate': 0.0,
+                            'favorite_escape_options': {}, 'escape_option_history': [],
+                            'ai_prediction_accuracy': 0.5, 'ai_correct_predictions': 1,
+                            'location_specific_preferences': {}, 'risk_profile_when_caught': 'balanced'},
+            'ai_memory': {'times_predicted': 2, 'times_caught_by_ai': 1,
+                         'catch_rate': 0.5, 'prediction_accuracy': 0,
+                         'has_personal_model': False, 'model_trained_date': None},
+            'match_history': [
+                {'game_id': 'game-1', 'date': '2025-12-24T00:00:00Z', 'outcome': 'win',
+                 'final_score': 100, 'rounds_played': 10, 'caught': False, 'num_opponents': 1,
+                 'escapes_in_game': 0, 'high_threat_escape': False},
+                {'game_id': 'game-2', 'date': '2025-12-24T01:00:00Z', 'outcome': 'loss',
+                 'final_score': 50, 'rounds_played': 10, 'caught': True, 'num_opponents': 1,
+                 'escapes_in_game': 1, 'high_threat_escape': False}
+            ]
+        }
+
+        profile = PlayerProfile.from_dict(data)
+
+        assert len(profile.match_history) == 2
+        assert isinstance(profile.match_history[0], MatchHistoryEntry)
+        assert profile.match_history[0].game_id == 'game-1'
+        assert profile.match_history[1].caught is True
+
+
+class TestWinRateEdgeCases:
+    """Tests for win rate calculation edge cases."""
+
+    def test_win_rate_zero_games(self):
+        """Test win rate with zero games."""
+        stats = ProfileStats()
+        stats.update_win_rate()
+        assert stats.win_rate == 0.0
+
+    def test_catch_rate_zero_predictions(self):
+        """Test catch rate with zero predictions."""
+        ai_stats = AIMemoryStats()
+        ai_stats.update_catch_rate()
+        assert ai_stats.catch_rate == 0.0
+
+
+class TestProfileLoadErrors:
+    """Tests for error handling during profile loading."""
+
+    def test_load_corrupt_profile(self, temp_profile_dir, monkeypatch):
+        """Test loading a corrupt profile file."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+        profile_id = profile.profile_id
+
+        # Corrupt the profile file
+        profile_path = temp_profile_dir / f"{profile_id}.json"
+        with open(profile_path, 'w') as f:
+            f.write("not valid json {{{{")
+
+        # Should return None and print warning
+        loaded = pm.load_profile(profile_id)
+        assert loaded is None
+
+    def test_list_profiles_with_corrupt_file(self, temp_profile_dir):
+        """Test listing profiles handles corrupt files gracefully."""
+        pm = ProfileManager()
+        pm.create_profile("Alice")
+        pm.create_profile("Bob")
+
+        # Create a corrupt file
+        corrupt_file = temp_profile_dir / "corrupt.json"
+        with open(corrupt_file, 'w') as f:
+            f.write("not json")
+
+        # Should still list valid profiles
+        profiles = pm.list_all_profiles()
+        names = {p.name for p in profiles}
+        assert "Alice" in names
+        assert "Bob" in names
+
+
+class TestProfileDeletionEdgeCases:
+    """Tests for profile deletion edge cases."""
+
+    def test_delete_profile_with_model(self, temp_profile_dir):
+        """Test deleting a profile also deletes its AI model."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+        profile_id = profile.profile_id
+
+        # Create fake model files
+        ai_models_dir = temp_profile_dir / "ai_models"
+        model_file = ai_models_dir / f"{profile_id}_model.pkl"
+        encoder_file = ai_models_dir / f"{profile_id}_encoder.pkl"
+
+        model_file.write_text("fake model")
+        encoder_file.write_text("fake encoder")
+
+        # Verify files exist
+        assert model_file.exists()
+        assert encoder_file.exists()
+
+        # Delete profile
+        result = pm.delete_profile(profile_id)
+
+        assert result is True
+        assert not model_file.exists()
+        assert not encoder_file.exists()
+
+
+class TestUpdateStatsEdgeCases:
+    """Tests for update_stats_after_game edge cases."""
+
+    def test_update_stats_nonexistent_profile(self, temp_profile_dir):
+        """Test updating stats for nonexistent profile does nothing."""
+        pm = ProfileManager()
+
+        # Should not raise, just return
+        pm.update_stats_after_game("nonexistent-id", {
+            'outcome': 'win',
+            'final_score': 100,
+            'rounds_played': 10,
+            'caught': False
+        })
+
+    def test_update_stats_highest_score_not_beaten(self, temp_profile_dir):
+        """Test highest score not updated if not beaten."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        # First game with high score
+        game_data1 = {
+            'game_id': 'game-1',
+            'outcome': 'win',
+            'final_score': 150,
+            'rounds_played': 10,
+            'caught': False,
+            'num_opponents': 1,
+            'locations_chosen': [],
+            'items_used': []
+        }
+        pm.update_stats_after_game(profile.profile_id, game_data1)
+
+        # Second game with lower score
+        game_data2 = {
+            'game_id': 'game-2',
+            'outcome': 'win',
+            'final_score': 80,
+            'rounds_played': 10,
+            'caught': False,
+            'num_opponents': 1,
+            'locations_chosen': [],
+            'items_used': []
+        }
+        pm.update_stats_after_game(profile.profile_id, game_data2)
+
+        updated = pm.load_profile(profile.profile_id)
+        assert updated.stats.highest_score == 150  # Should still be first game's score
+
+
+class TestLocationPreferencesEdgeCases:
+    """Tests for get_location_preferences edge cases."""
+
+    def test_location_preferences_zero_total(self, temp_profile_dir):
+        """Test preferences when total is zero."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        # Set location frequencies with zeros (edge case)
+        profile.behavioral_stats.location_frequencies = {}
+        pm.save_profile(profile)
+
+        preferences = pm.get_location_preferences(profile)
+        assert preferences == {}
+
+
+class TestMigrateLegacyGames:
+    """Tests for migrate_legacy_games method."""
+
+    def test_migrate_no_history_file(self, temp_profile_dir):
+        """Test migration when no game_history.json exists."""
+        pm = ProfileManager()
+
+        result = pm.migrate_legacy_games()
+
+        assert 'error' in result
+        assert result['profiles_created'] == 0
+        assert result['games_migrated'] == 0
+
+
+class TestTrainPlayerModel:
+    """Tests for _train_player_model method."""
+
+    def test_train_model_at_milestone(self, temp_profile_dir, monkeypatch):
+        """Test model training is triggered at milestone games."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        trained = []
+
+        # Mock PlayerPredictor
+        class MockPredictor:
+            def __init__(self, profile_id, data_dir):
+                pass
+
+            def train_personal_model(self, min_samples=10):
+                trained.append(True)
+                return True
+
+        monkeypatch.setattr("ai.player_predictor.PlayerPredictor", MockPredictor, raising=False)
+
+        # Play exactly 5 games to trigger training
+        for i in range(5):
+            game_data = {
+                'game_id': f'game-{i}',
+                'outcome': 'win',
+                'final_score': 100,
+                'rounds_played': 10,
+                'caught': False,
+                'num_opponents': 1,
+                'locations_chosen': ['Bank'],
+                'items_used': []
+            }
+            pm.update_stats_after_game(profile.profile_id, game_data)
+
+        # Model should have been trained once at game 5
+        assert len(trained) >= 1
