@@ -111,6 +111,9 @@ class PlayerProfile:
     @staticmethod
     def from_dict(data: dict) -> 'PlayerProfile':
         """Create PlayerProfile from dictionary."""
+        # Remove deprecated/unknown fields
+        data.pop('achievements', None)  # Achievements feature was removed
+
         # Convert nested dataclasses
         if 'stats' in data and isinstance(data['stats'], dict):
             data['stats'] = ProfileStats(**data['stats'])
@@ -119,7 +122,19 @@ class PlayerProfile:
             data['behavioral_stats'] = BehavioralStats(**data['behavioral_stats'])
 
         if 'hiding_stats' in data and isinstance(data['hiding_stats'], dict):
-            data['hiding_stats'] = HidingBehavioralStats(**data['hiding_stats'])
+            hiding_data = data['hiding_stats']
+            # Backward compatibility: migrate old field names to new ones
+            if 'favorite_hiding_spots' in hiding_data:
+                hiding_data['favorite_escape_options'] = hiding_data.pop('favorite_hiding_spots')
+            if 'ai_detection_rate_by_spot' in hiding_data:
+                hiding_data.pop('ai_detection_rate_by_spot')  # Remove deprecated field
+            # Add default values for new fields that may be missing
+            hiding_data.setdefault('total_escapes', 0)
+            hiding_data.setdefault('favorite_escape_options', {})
+            hiding_data.setdefault('escape_option_history', [])
+            hiding_data.setdefault('ai_prediction_accuracy', 0.0)
+            hiding_data.setdefault('ai_correct_predictions', 0)
+            data['hiding_stats'] = HidingBehavioralStats(**hiding_data)
         elif 'hiding_stats' not in data:
             # Backward compatibility for old profiles without hiding stats
             data['hiding_stats'] = HidingBehavioralStats()
