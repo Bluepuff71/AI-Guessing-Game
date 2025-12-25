@@ -22,6 +22,8 @@ class ConfigLoader:
         self.game_settings = self._load_json("game_settings.json")
         self.locations_config = self._load_json("locations.json")
         self.items_config = self._load_json("items.json")
+        self.hiding_config = self._load_json("hiding.json")
+        self.events_config = self._load_json("events.json")
 
     def _load_json(self, filename: str) -> Dict[str, Any]:
         """Load a JSON configuration file."""
@@ -53,6 +55,22 @@ class ConfigLoader:
     def get_items(self):
         """Get items configuration."""
         return self.items_config.get('items', [])
+
+    def get_hiding_mechanics(self):
+        """Get hiding mechanics configuration."""
+        return self.hiding_config.get('mechanics', {})
+
+    def get_hiding_spots(self):
+        """Get hiding location spots configuration."""
+        return self.hiding_config.get('location_hiding_spots', {})
+
+    def get_events_settings(self):
+        """Get events settings configuration."""
+        return self.events_config.get('settings', {})
+
+    def get_events_list(self):
+        """Get events list configuration."""
+        return self.events_config.get('events', [])
 
 
 # Global config instance

@@ -19,6 +19,17 @@ class Player:
         self.choice_history: List[str] = []  # Location names chosen
         self.round_history: List[Dict[str, Any]] = []  # Full round data
 
+        # Hiding/running tracking
+        self.hide_run_history: List[Dict[str, Any]] = []  # All hide/run attempts
+        self.hiding_stats: Dict[str, Any] = {
+            'total_hide_attempts': 0,
+            'successful_hides': 0,
+            'total_run_attempts': 0,
+            'successful_runs': 0,
+            'favorite_hide_spots': {},  # {spot_id: count}
+            'hide_vs_run_ratio': 0.0  # Preference for hiding vs running
+        }
+
     def add_points(self, points: int):
         """Add points to player."""
         self.points += points
@@ -73,6 +84,50 @@ class Player:
             'caught': caught,
             'items_held': [item.name for item in self.get_active_items()],
         })
+
+    def record_hide_run_attempt(self, hide_run_result: Dict[str, Any], round_num: int):
+        """
+        Record a hide or run attempt for AI learning.
+
+        Args:
+            hide_run_result: Dict containing choice, escaped, points_awarded, etc.
+            round_num: Current round number
+        """
+        choice = hide_run_result['choice']  # 'hide' or 'run'
+        escaped = hide_run_result['escaped']
+
+        # Record in history
+        self.hide_run_history.append({
+            'round': round_num,
+            'choice': choice,
+            'escaped': escaped,
+            'hide_spot_id': hide_run_result.get('hide_spot_id'),
+            'ai_threat_level': hide_run_result.get('ai_threat_level', 0.0),
+            'points_before': self.points,
+            'points_retained': hide_run_result.get('points_retained', 0)
+        })
+
+        # Update statistics
+        if choice == 'hide':
+            self.hiding_stats['total_hide_attempts'] += 1
+            if escaped:
+                self.hiding_stats['successful_hides'] += 1
+
+            # Track favorite hiding spots
+            spot_id = hide_run_result.get('hide_spot_id')
+            if spot_id:
+                if spot_id not in self.hiding_stats['favorite_hide_spots']:
+                    self.hiding_stats['favorite_hide_spots'][spot_id] = 0
+                self.hiding_stats['favorite_hide_spots'][spot_id] += 1
+        else:  # run
+            self.hiding_stats['total_run_attempts'] += 1
+            if escaped:
+                self.hiding_stats['successful_runs'] += 1
+
+        # Update hide vs run ratio
+        total = self.hiding_stats['total_hide_attempts'] + self.hiding_stats['total_run_attempts']
+        if total > 0:
+            self.hiding_stats['hide_vs_run_ratio'] = self.hiding_stats['total_hide_attempts'] / total
 
     def get_behavior_summary(self) -> Dict[str, Any]:
         """Get summary of player behavior for AI analysis."""

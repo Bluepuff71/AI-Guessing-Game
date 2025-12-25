@@ -204,4 +204,131 @@ def generate_insights(player: Player, num_locations: int = 5) -> Dict[str, Any]:
             )
             insights['tips'].append(f"Consider safer choices when close to {win_threshold} points")
 
+    # Hiding/escape behavior analysis
+    if hasattr(player, 'hide_run_history') and len(player.hide_run_history) > 0:
+        total_attempts = len(player.hide_run_history)
+        successful_escapes = sum(1 for attempt in player.hide_run_history if attempt.get('escaped', False))
+        escape_rate = successful_escapes / total_attempts if total_attempts > 0 else 0
+
+        hide_attempts = player.hiding_stats['total_hide_attempts']
+        run_attempts = player.hiding_stats['total_run_attempts']
+
+        # Overall escape performance
+        if escape_rate >= 0.8:
+            insights['patterns'].append(f"Escape master: {escape_rate:.0%} escape success rate ({successful_escapes}/{total_attempts})")
+        elif escape_rate <= 0.3:
+            insights['patterns'].append(f"Caught often: Only {escape_rate:.0%} escape success rate ({successful_escapes}/{total_attempts})")
+            insights['tips'].append("Try varying your hiding spots and mixing hide/run choices")
+
+        # Hide vs run preference
+        if total_attempts >= 3:
+            if hide_attempts > run_attempts * 2:
+                insights['patterns'].append(f"Hide preference: Chose to hide {hide_attempts} times vs run {run_attempts} times")
+                if player.hiding_stats['hide_vs_run_ratio'] > 0.8:
+                    insights['tips'].append("AI is learning your hiding patterns - consider running occasionally")
+            elif run_attempts > hide_attempts * 2:
+                insights['patterns'].append(f"Runner: Chose to run {run_attempts} times vs hide {hide_attempts} times")
+                if player.hiding_stats['hide_vs_run_ratio'] < 0.2:
+                    insights['tips'].append("Running is risky - hiding might improve your survival rate")
+
+        # Favorite hiding spots
+        if player.hiding_stats['favorite_hide_spots']:
+            sorted_spots = sorted(player.hiding_stats['favorite_hide_spots'].items(),
+                                key=lambda x: x[1], reverse=True)
+            if sorted_spots[0][1] >= 2:
+                spot_id = sorted_spots[0][0]
+                count = sorted_spots[0][1]
+                insights['patterns'].append(f"Favorite hiding spot: {spot_id} (used {count} times)")
+                if count >= 3:
+                    insights['tips'].append("AI learns your favorite spots - vary your hiding locations")
+
     return insights
+
+
+def extract_hiding_features(player: Player) -> Dict[str, float]:
+    """
+    Extract features related to hiding/running behavior for AI learning.
+
+    Args:
+        player: Player to extract hiding features for
+
+    Returns:
+        Dict of hiding-related features for AI prediction
+    """
+    if not hasattr(player, 'hiding_stats'):
+        # Player has no hiding history yet
+        return {
+            'hide_vs_run_ratio': 0.5,  # Default: no preference
+            'hide_success_rate': 0.0,
+            'run_success_rate': 0.0,
+            'total_escape_attempts': 0,
+            'predictability_when_caught': 0.5
+        }
+
+    stats = player.hiding_stats
+    total_attempts = stats['total_hide_attempts'] + stats['total_run_attempts']
+
+    return {
+        'hide_vs_run_ratio': (
+            stats['total_hide_attempts'] / total_attempts
+            if total_attempts > 0 else 0.5
+        ),
+        'hide_success_rate': (
+            stats['successful_hides'] / stats['total_hide_attempts']
+            if stats['total_hide_attempts'] > 0 else 0.0
+        ),
+        'run_success_rate': (
+            stats['successful_runs'] / stats['total_run_attempts']
+            if stats['total_run_attempts'] > 0 else 0.0
+        ),
+        'total_escape_attempts': total_attempts,
+        'predictability_when_caught': calculate_hide_predictability(player)
+    }
+
+
+def calculate_hide_predictability(player: Player) -> float:
+    """
+    Calculate how predictable a player's hiding choices are (0-1 scale).
+
+    Higher values = more predictable (easier for AI to catch)
+
+    Considers:
+    - Favorite hiding spots (spot predictability)
+    - Hide vs run tendency (choice predictability)
+
+    Args:
+        player: Player to analyze
+
+    Returns:
+        Predictability score (0.0-1.0)
+    """
+    if not hasattr(player, 'hiding_stats'):
+        return 0.5  # Default: moderate predictability
+
+    stats = player.hiding_stats
+
+    # Calculate spot predictability
+    if stats['favorite_hide_spots']:
+        total = sum(stats['favorite_hide_spots'].values())
+        if total > 0:
+            most_common_count = max(stats['favorite_hide_spots'].values())
+            spot_predictability = most_common_count / total
+        else:
+            spot_predictability = 0.5
+    else:
+        spot_predictability = 0.5
+
+    # Calculate choice predictability (hide vs run bias)
+    total_attempts = stats['total_hide_attempts'] + stats['total_run_attempts']
+    if total_attempts >= 3:
+        hide_ratio = stats['total_hide_attempts'] / total_attempts
+        # Closer to 0.5 = more unpredictable, closer to 0 or 1 = predictable
+        choice_unpredictability = 1.0 - abs(hide_ratio - 0.5) * 2
+        choice_predictability = 1.0 - choice_unpredictability
+    else:
+        choice_predictability = 0.5
+
+    # Combine factors (spot patterns are more important)
+    predictability = (spot_predictability * 0.6 + choice_predictability * 0.4)
+
+    return min(1.0, max(0.0, predictability))

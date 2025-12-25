@@ -182,6 +182,50 @@ class AchievementTracker:
             ),
             hidden=True
         ),
+
+        # Hiding/escape achievements
+        Achievement(
+            id="houdini",
+            name="Houdini",
+            description="Escape 5 times in one game",
+            emoji="🎩",
+            condition=lambda profile: _check_escape_streak_in_game(profile, 5)
+        ),
+        Achievement(
+            id="master_of_disguise",
+            name="Master of Disguise",
+            description="Successfully hide 10 times across all games",
+            emoji="🥸",
+            condition=lambda profile: (
+                hasattr(profile, 'hiding_stats') and
+                profile.hiding_stats.hide_success_rate * profile.hiding_stats.hide_attempts >= 10
+            )
+        ),
+        Achievement(
+            id="speed_demon",
+            name="Speed Demon",
+            description="Successfully run 10 times across all games",
+            emoji="💨",
+            condition=lambda profile: (
+                hasattr(profile, 'hiding_stats') and
+                profile.hiding_stats.run_success_rate * profile.hiding_stats.run_attempts >= 10
+            )
+        ),
+        Achievement(
+            id="escape_artist",
+            name="Escape Artist",
+            description="Achieve 100% escape rate over 5+ attempts",
+            emoji="✨",
+            condition=lambda profile: _check_perfect_escape_rate(profile, 5)
+        ),
+        Achievement(
+            id="high_stakes_escape",
+            name="High Stakes Escape",
+            description="Escape when AI threat is 90%+ (hidden)",
+            emoji="🎯",
+            condition=lambda profile: _check_high_threat_escape(profile),
+            hidden=True
+        ),
     ]
 
     @staticmethod
@@ -325,3 +369,51 @@ def _check_ai_nemesis(profile, wins_needed: int) -> bool:
     )
 
     return wins_with_model >= wins_needed
+
+
+def _check_escape_streak_in_game(profile, escapes_needed: int) -> bool:
+    """Check if player escaped N times in a single game."""
+    if not hasattr(profile, 'hiding_stats'):
+        return False
+
+    # Check match history for games with multiple escapes
+    for match in profile.match_history:
+        if hasattr(match, 'escapes_in_game') and match.escapes_in_game >= escapes_needed:
+            return True
+
+    return False
+
+
+def _check_perfect_escape_rate(profile, min_attempts: int) -> bool:
+    """Check if player has 100% escape rate over minimum attempts."""
+    if not hasattr(profile, 'hiding_stats'):
+        return False
+
+    hiding_stats = profile.hiding_stats
+    total_attempts = hiding_stats.hide_attempts + hiding_stats.run_attempts
+
+    if total_attempts < min_attempts:
+        return False
+
+    # Calculate successful escapes
+    successful_hides = int(hiding_stats.hide_success_rate * hiding_stats.hide_attempts)
+    successful_runs = int(hiding_stats.run_success_rate * hiding_stats.run_attempts)
+    total_successful = successful_hides + successful_runs
+
+    # Check if all attempts were successful
+    return total_successful == total_attempts
+
+
+def _check_high_threat_escape(profile) -> bool:
+    """Check if player escaped when AI threat was 90%+."""
+    # This requires tracking AI threat in match history
+    # For now, we'll check if they have escapes and high predictability
+    if not hasattr(profile, 'hiding_stats'):
+        return False
+
+    # Check match history for high-threat escapes
+    for match in profile.match_history:
+        if hasattr(match, 'high_threat_escape') and match.high_threat_escape:
+            return True
+
+    return False

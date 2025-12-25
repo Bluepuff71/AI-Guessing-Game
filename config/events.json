@@ -1,0 +1,121 @@
+{
+  "settings": {
+    "max_concurrent": 2,
+    "spawn_triggers": {
+      "round_interval": 3,
+      "high_score_threshold": 50,
+      "high_score_chance": 0.3,
+      "catch_threshold": 2,
+      "catch_chance": 0.4,
+      "first_round_chance": 0.5
+    }
+  },
+  "events": [
+    {
+      "id": "jackpot",
+      "name": "Jackpot Night",
+      "description": "Points doubled at this location!",
+      "emoji": "💰",
+      "duration_rounds": 1,
+      "category": "point_modifier",
+      "point_modifier": {
+        "type": "multiply",
+        "value": 2.0
+      }
+    },
+    {
+      "id": "clearance",
+      "name": "Clearance Sale",
+      "description": "50% more points",
+      "emoji": "🏷️",
+      "duration_rounds": 2,
+      "category": "point_modifier",
+      "point_modifier": {
+        "type": "multiply",
+        "value": 1.5
+      }
+    },
+    {
+      "id": "lockdown",
+      "name": "Security Lockdown",
+      "description": "Points reduced by 30%",
+      "emoji": "🚨",
+      "duration_rounds": 1,
+      "category": "point_modifier",
+      "point_modifier": {
+        "type": "multiply",
+        "value": 0.7
+      }
+    },
+    {
+      "id": "bonus_stash",
+      "name": "Bonus Stash",
+      "description": "+20 flat bonus points",
+      "emoji": "🎁",
+      "duration_rounds": 1,
+      "category": "point_modifier",
+      "point_modifier": {
+        "type": "add",
+        "value": 20
+      }
+    },
+    {
+      "id": "distraction",
+      "name": "Major Distraction",
+      "description": "AI 50% less likely to search here",
+      "emoji": "🎭",
+      "duration_rounds": 1,
+      "category": "risk_modifier",
+      "risk_modifier": {
+        "type": "multiply",
+        "value": 0.5
+      }
+    },
+    {
+      "id": "tip_off",
+      "name": "Anonymous Tip",
+      "description": "AI highly likely to search here",
+      "emoji": "📞",
+      "duration_rounds": 1,
+      "category": "risk_modifier",
+      "risk_modifier": {
+        "type": "multiply_capped",
+        "value": 2.5,
+        "cap": 0.95
+      }
+    },
+    {
+      "id": "patrol",
+      "name": "AI Patrol",
+      "description": "AI moderately more likely to search",
+      "emoji": "🚔",
+      "duration_rounds": 2,
+      "category": "risk_modifier",
+      "risk_modifier": {
+        "type": "multiply",
+        "value": 1.4
+      }
+    },
+    {
+      "id": "all_clear",
+      "name": "All Clear",
+      "description": "AI 30% less likely to search",
+      "emoji": "✅",
+      "duration_rounds": 2,
+      "category": "risk_modifier",
+      "risk_modifier": {
+        "type": "multiply",
+        "value": 0.7
+      }
+    },
+    {
+      "id": "silent_alarm",
+      "name": "Silent Alarm",
+      "description": "Guaranteed catch if chosen",
+      "emoji": "⚠️",
+      "duration_rounds": 1,
+      "category": "special_effect",
+      "special_effect": "guaranteed_catch"
+    }
+  ]
+}

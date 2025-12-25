@@ -8,6 +8,7 @@ class ItemType(Enum):
     """Types of items available in the shop."""
     INTEL_REPORT = "intel_report"
     SCOUT = "scout"
+    SMOKE_BOMB = "smoke_bomb"
 
 
 class Item:

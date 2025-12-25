@@ -13,6 +13,7 @@ from ai.predictor import AIPredictor
 from ai.features import generate_insights
 from game.profile_manager import ProfileManager, PlayerProfile
 from game.events import EventManager
+from game.hiding import HidingManager
 
 
 class GameEngine:
@@ -25,6 +26,7 @@ class GameEngine:
         self.location_manager = LocationManager()
         self.ai = AIPredictor(self.location_manager)
         self.event_manager = EventManager()
+        self.hiding_manager = HidingManager()
         self.round_num = 0
         self.game_over = False
         self.winner: Optional[Player] = None
@@ -294,7 +296,15 @@ class GameEngine:
                     'risk_profile': profile.behavioral_stats.risk_profile,
                     'catch_rate': profile.ai_memory.catch_rate,
                     'has_personal_model': profile.ai_memory.has_personal_model,
-                    'total_games': profile.stats.total_games
+                    'total_games': profile.stats.total_games,
+                    'hiding_stats': {
+                        'total_caught': profile.hiding_stats.total_caught_instances,
+                        'hide_attempts': profile.hiding_stats.hide_attempts,
+                        'run_attempts': profile.hiding_stats.run_attempts,
+                        'hide_success_rate': profile.hiding_stats.hide_success_rate,
+                        'run_success_rate': profile.hiding_stats.run_success_rate,
+                        'risk_profile_when_caught': profile.hiding_stats.risk_profile_when_caught
+                    }
                 }
 
         ui.show_intel_report(player, threat_level, predictability, insights, ai_memory)
@@ -351,18 +361,32 @@ class GameEngine:
 
             # Check for immunity event
             if special_effect == "immunity" and caught:
-                caught = False
-                ui.console.print(f"\n[green]🛡️ Insurance Active! {player.name} is protected from capture![/green]")
+                # Immunity event - auto-escape with full points
+                ui.console.print(f"\n[green]🛡️ Insurance Active! {player.name} slips away undetected![/green]")
+                caught = False  # Override caught status
 
             if caught:
-                # Player is eliminated
-                ui.print_player_caught(player, shield_saved=False)
-                player.alive = False
-                player.record_choice(chosen_location, self.round_num, caught=True, points_earned=0)
+                # Player caught - trigger hide/run mechanic
+                hide_run_result = self.handle_hide_or_run(player, chosen_location, search_location)
 
-                # Show post-game report
-                insights = generate_insights(player, len(self.location_manager))
-                ui.print_post_game_report(player, insights)
+                if hide_run_result['escaped']:
+                    # Player escaped! Still alive
+                    player.alive = True
+                    ui.print_escape_success(player, hide_run_result)
+                    player.record_choice(chosen_location, self.round_num, caught=False,
+                                       points_earned=hide_run_result.get('points_awarded', 0))
+                else:
+                    # Failed to escape - eliminated
+                    player.alive = False
+                    ui.print_escape_failure(player, hide_run_result)
+                    player.record_choice(chosen_location, self.round_num, caught=True, points_earned=0)
+
+                    # Show post-game report
+                    insights = generate_insights(player, len(self.location_manager))
+                    ui.print_post_game_report(player, insights)
+
+                # Record hide/run attempt for AI learning
+                player.record_hide_run_attempt(hide_run_result, self.round_num)
             else:
                 # Player successfully looted
                 # Roll individual points for this player
@@ -556,6 +580,26 @@ class GameEngine:
                 # Collect items used during game
                 items_used = [item.name for item in player.items]
 
+                # Collect hiding stats from this game
+                hiding_data = {
+                    'hide_attempts': player.hiding_stats['total_hide_attempts'],
+                    'successful_hides': player.hiding_stats['successful_hides'],
+                    'run_attempts': player.hiding_stats['total_run_attempts'],
+                    'successful_runs': player.hiding_stats['successful_runs'],
+                    'favorite_hiding_spots': player.hiding_stats['favorite_hide_spots'],
+                    'total_caught_instances': len(player.hide_run_history)
+                }
+
+                # Calculate achievement-related stats
+                escapes_in_game = sum(
+                    1 for attempt in player.hide_run_history
+                    if attempt.get('escaped', False)
+                )
+                high_threat_escape = any(
+                    attempt.get('escaped', False) and attempt.get('ai_threat_level', 0) >= 0.9
+                    for attempt in player.hide_run_history
+                )
+
                 # Update profile stats and check for achievements
                 newly_unlocked = pm.update_stats_after_game(
                     player.profile_id,
@@ -567,7 +611,10 @@ class GameEngine:
                         'rounds_played': self.round_num,
                         'num_opponents': self.num_players - 1,
                         'locations_chosen': player.choice_history,
-                        'items_used': items_used
+                        'items_used': items_used,
+                        'hiding_data': hiding_data,
+                        'escapes_in_game': escapes_in_game,
+                        'high_threat_escape': high_threat_escape
                     }
                 )
 
@@ -596,3 +643,122 @@ class GameEngine:
                     if len(choice) >= 3 and not choice[2]:  # choice[2] is success (False = caught)
                         count += 1
         return count
+
+    def handle_hide_or_run(self, player: Player, caught_location: Location,
+                          search_location: Location) -> Dict[str, any]:
+        """
+        Handle the hide or run decision when player is caught.
+
+        Args:
+            player: Player who was caught
+            caught_location: Location where player was caught
+            search_location: Location AI searched
+
+        Returns:
+            Dict with choice, escaped, points_awarded, hide_spot_id, ai_threat_level, success_chance
+        """
+        # Calculate AI threat level for this player
+        ai_threat = self.ai._calculate_win_threat(player)
+
+        # Show caught message
+        ui.print_caught_message(player, caught_location)
+
+        # Present choice
+        choice_type = ui.get_hide_or_run_choice(player, caught_location, ai_threat)
+
+        if choice_type == 'hide':
+            return self._handle_hide_attempt(player, caught_location, ai_threat)
+        else:  # 'run'
+            return self._handle_run_attempt(player, caught_location, ai_threat)
+
+    def _handle_hide_attempt(self, player: Player, location: Location,
+                            ai_threat: float) -> Dict[str, any]:
+        """Handle hiding attempt with location-specific spots."""
+        hiding_spots = self.hiding_manager.get_hiding_spots_for_location(location.name)
+
+        # Show hiding spots to player
+        chosen_spot = ui.select_hiding_spot(hiding_spots, player)
+
+        # Calculate base success chance
+        success_chance = self.hiding_manager.calculate_hide_success_chance(
+            chosen_spot, player, ai_threat
+        )
+
+        # Track item effects for display
+        item_effects = []
+
+        # Check for smoke bomb item (+25% success)
+        from game.items import ItemType
+        if player.has_item(ItemType.SMOKE_BOMB):
+            player.use_item(ItemType.SMOKE_BOMB)
+            success_chance = min(0.95, success_chance + 0.25)
+            item_effects.append("💨 Smoke Bomb: +25% escape chance")
+            ui.console.print("[green]💨 You use a Smoke Bomb to obscure your hiding![/green]")
+
+        # Check for guaranteed catch event (-20% success)
+        special_effect = self.event_manager.get_special_effect(location)
+        if special_effect == "guaranteed_catch":
+            success_chance = max(0.1, success_chance - 0.2)
+            item_effects.append("🚨 Silent Alarm: -20% escape chance")
+            ui.console.print("[red]🚨 The alarm makes hiding more difficult![/red]")
+
+        # Roll for success
+        import random
+        escaped = random.random() < success_chance
+
+        return {
+            'choice': 'hide',
+            'escaped': escaped,
+            'points_awarded': 0,  # Hiding gives no points
+            'hide_spot_id': chosen_spot['id'],
+            'hide_spot_name': chosen_spot['name'],
+            'ai_threat_level': ai_threat,
+            'success_chance': success_chance,
+            'item_effects': item_effects
+        }
+
+    def _handle_run_attempt(self, player: Player, location: Location,
+                           ai_threat: float) -> Dict[str, any]:
+        """Handle running attempt with AI-adjusted escape chance."""
+        # Calculate base escape chance and points
+        escape_chance = self.hiding_manager.calculate_run_escape_chance(player, ai_threat)
+        points_retained = int(player.points * self.hiding_manager.get_run_point_retention())
+
+        # Show run option with calculated chances
+        confirmed = ui.confirm_run_attempt(player, escape_chance, points_retained)
+
+        if not confirmed:
+            # Player changed mind - go back to hide choice
+            return self._handle_hide_attempt(player, location, ai_threat)
+
+        # Track item effects for display
+        item_effects = []
+
+        # Check for smoke bomb (+25% escape chance)
+        from game.items import ItemType
+        if player.has_item(ItemType.SMOKE_BOMB):
+            player.use_item(ItemType.SMOKE_BOMB)
+            escape_chance = min(0.95, escape_chance + 0.25)
+            item_effects.append("💨 Smoke Bomb: +25% escape chance")
+            ui.console.print("[green]💨 You use a Smoke Bomb to cover your escape![/green]")
+
+        # Roll for success
+        import random
+        escaped = random.random() < escape_chance
+
+        # Calculate points - only keep if escaped
+        if escaped:
+            # Player keeps 80% of points (loses 20%)
+            player.points = points_retained
+
+        return {
+            'choice': 'run',
+            'escaped': escaped,
+            'points_awarded': 0,  # Points already adjusted via player.points
+            'hide_spot_id': None,
+            'hide_spot_name': None,
+            'ai_threat_level': ai_threat,
+            'success_chance': escape_chance,
+            'points_retained': points_retained if escaped else 0,
+            'item_effects': item_effects
+        }

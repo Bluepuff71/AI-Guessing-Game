@@ -1,7 +1,7 @@
 """Event system for dynamic location effects."""
 import random
 from dataclasses import dataclass, field
-from typing import Callable, Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any
 from game.locations import Location
 
 
@@ -14,9 +14,9 @@ class Event:
     emoji: str
     duration_rounds: int  # 1 or 2
 
-    # Effect callbacks
-    point_modifier: Optional[Callable[[int], int]] = None  # Modify points rolled
-    risk_modifier: Optional[Callable[[float], float]] = None  # Modify AI prediction probability
+    # Effect modifiers (config-based or callable for backward compatibility)
+    point_modifier: Optional[Any] = None  # Dict config or Callable[[int], int]
+    risk_modifier: Optional[Any] = None  # Dict config or Callable[[float], float]
     special_effect: Optional[str] = None  # Special mechanics: "immunity", "guaranteed_catch"
 
     # State tracking (set when event is spawned)
@@ -39,6 +39,79 @@ class Event:
         new_event.affected_location = location
         return new_event
 
+    def apply_point_modifier(self, points: int) -> int:
+        """
+        Apply point modifier to a point value.
+
+        Args:
+            points: Base points value
+
+        Returns:
+            Modified points value
+
+        Supports:
+            - Dict config: {"type": "multiply", "value": 2.0}
+            - Dict config: {"type": "add", "value": 20}
+            - Callable (legacy): lambda pts: pts * 2
+        """
+        if self.point_modifier is None:
+            return points
+
+        # Legacy callable support
+        if callable(self.point_modifier):
+            return self.point_modifier(points)
+
+        # Config-based modifier
+        if isinstance(self.point_modifier, dict):
+            modifier_type = self.point_modifier.get('type')
+            value = self.point_modifier.get('value', 1.0)
+
+            if modifier_type == 'multiply':
+                return int(points * value)
+            elif modifier_type == 'add':
+                return points + int(value)
+            else:
+                return points
+
+        return points
+
+    def apply_risk_modifier(self, probability: float) -> float:
+        """
+        Apply risk modifier to a probability value.
+
+        Args:
+            probability: Base probability (0.0-1.0)
+
+        Returns:
+            Modified probability value
+
+        Supports:
+            - Dict config: {"type": "multiply", "value": 0.5}
+            - Dict config: {"type": "multiply_capped", "value": 2.5, "cap": 0.95}
+            - Callable (legacy): lambda p: p * 0.5
+        """
+        if self.risk_modifier is None:
+            return probability
+
+        # Legacy callable support
+        if callable(self.risk_modifier):
+            return self.risk_modifier(probability)
+
+        # Config-based modifier
+        if isinstance(self.risk_modifier, dict):
+            modifier_type = self.risk_modifier.get('type')
+            value = self.risk_modifier.get('value', 1.0)
+
+            if modifier_type == 'multiply':
+                return probability * value
+            elif modifier_type == 'multiply_capped':
+                cap = self.risk_modifier.get('cap', 1.0)
+                return min(probability * value, cap)
+            else:
+                return probability
+
+        return probability
+
 
 class EventManager:
     """Manages active events and event generation."""
@@ -51,105 +124,49 @@ class EventManager:
             max_concurrent: Maximum number of events that can be active simultaneously.
                           If None, loads from config (default: 2)
         """
-        # Load config if not provided
+        # Load config
+        from game.config_loader import config
+
+        # Load settings
         if max_concurrent is None:
-            from game.config_loader import ConfigLoader
-            config = ConfigLoader()
-            max_concurrent = config.get('events', 'max_concurrent', default=2)
+            max_concurrent = config.get_events_settings().get('max_concurrent', 2)
 
         self.max_concurrent = max_concurrent
         self.active_events: List[Event] = []
+
+        # Load spawn triggers from config
+        spawn_triggers = config.get_events_settings().get('spawn_triggers', {})
+        self.round_interval = spawn_triggers.get('round_interval', 3)
+        self.high_score_threshold = spawn_triggers.get('high_score_threshold', 50)
+        self.high_score_chance = spawn_triggers.get('high_score_chance', 0.3)
+        self.catch_threshold = spawn_triggers.get('catch_threshold', 2)
+        self.catch_chance = spawn_triggers.get('catch_chance', 0.4)
+        self.first_round_chance = spawn_triggers.get('first_round_chance', 0.5)
+
+        # Load event pool from config
         self.event_pool = self._create_event_pool()
 
     def _create_event_pool(self) -> List[Event]:
-        """Define all possible events with balanced distribution."""
-        return [
-            # Point modifier events (40% - 4 events)
-            Event(
-                id="jackpot",
-                name="Jackpot Night",
-                description="Points doubled at this location!",
-                emoji="💰",
-                duration_rounds=1,
-                point_modifier=lambda pts: pts * 2
-            ),
-            Event(
-                id="clearance",
-                name="Clearance Sale",
-                description="50% more points",
-                emoji="🏷️",
-                duration_rounds=2,
-                point_modifier=lambda pts: int(pts * 1.5)
-            ),
-            Event(
-                id="lockdown",
-                name="Security Lockdown",
-                description="Points reduced by 30%",
-                emoji="🚨",
-                duration_rounds=1,
-                point_modifier=lambda pts: int(pts * 0.7)
-            ),
-            Event(
-                id="bonus_stash",
-                name="Bonus Stash",
-                description="+20 flat bonus points",
-                emoji="🎁",
-                duration_rounds=1,
-                point_modifier=lambda pts: pts + 20
-            ),
+        """Load all possible events from configuration."""
+        from game.config_loader import config
 
-            # Risk modifier events (40% - 4 events)
-            Event(
-                id="distraction",
-                name="Major Distraction",
-                description="AI 50% less likely to search here",
-                emoji="🎭",
-                duration_rounds=1,
-                risk_modifier=lambda prob: prob * 0.5
-            ),
-            Event(
-                id="tip_off",
-                name="Anonymous Tip",
-                description="AI highly likely to search here",
-                emoji="📞",
-                duration_rounds=1,
-                risk_modifier=lambda prob: min(prob * 2.5, 0.95)
-            ),
-            Event(
-                id="patrol",
-                name="Police Patrol",
-                description="AI moderately more likely to search",
-                emoji="🚔",
-                duration_rounds=2,
-                risk_modifier=lambda prob: prob * 1.4
-            ),
-            Event(
-                id="all_clear",
-                name="All Clear",
-                description="AI 30% less likely to search",
-                emoji="✅",
-                duration_rounds=2,
-                risk_modifier=lambda prob: prob * 0.7
-            ),
+        event_pool = []
+        events_data = config.get_events_list()
 
-            # Special mechanics events (20% - 2 events)
-            Event(
-                id="insurance",
-                name="Insurance Active",
-                description="Can't be caught here (still get points)",
-                emoji="🛡️",
-                duration_rounds=1,
-                special_effect="immunity"
-            ),
-            Event(
-                id="silent_alarm",
-                name="Silent Alarm",
-                description="Guaranteed catch if chosen",
-                emoji="⚠️",
-                duration_rounds=1,
-                special_effect="guaranteed_catch"
-            ),
-        ]
+        for event_data in events_data:
+            event = Event(
+                id=event_data['id'],
+                name=event_data['name'],
+                description=event_data['description'],
+                emoji=event_data['emoji'],
+                duration_rounds=event_data['duration_rounds'],
+                point_modifier=event_data.get('point_modifier'),
+                risk_modifier=event_data.get('risk_modifier'),
+                special_effect=event_data.get('special_effect')
+            )
+            event_pool.append(event)
+
+        return event_pool
 
     def generate_events(self, game_state: Dict[str, Any],
                        available_locations: List[Location]) -> List[Event]:
@@ -171,23 +188,23 @@ class EventManager:
         max_score = game_state.get('max_player_score', 0)
         recent_catches = game_state.get('catches_last_3_rounds', 0)
 
-        # State-based triggers
+        # State-based triggers (loaded from config)
         should_spawn = False
 
-        # Round-based triggers (every 3 rounds)
-        if round_num % 3 == 0 and round_num > 0:
+        # Round-based triggers
+        if round_num % self.round_interval == 0 and round_num > 0:
             should_spawn = True
 
-        # Score-based triggers (30% chance if someone over 50)
-        if max_score > 50 and random.random() < 0.3:
+        # Score-based triggers
+        if max_score > self.high_score_threshold and random.random() < self.high_score_chance:
             should_spawn = True
 
-        # Catch-based triggers (40% chance after 2+ catches in last 3 rounds)
-        if recent_catches >= 2 and random.random() < 0.4:
+        # Catch-based triggers
+        if recent_catches >= self.catch_threshold and random.random() < self.catch_chance:
             should_spawn = True
 
-        # First round trigger (50% chance to start with an event)
-        if round_num == 1 and random.random() < 0.5:
+        # First round trigger
+        if round_num == 1 and random.random() < self.first_round_chance:
             should_spawn = True
 
         newly_spawned = []
@@ -272,7 +289,7 @@ class EventManager:
         event = self.get_location_event(location)
 
         if event and event.point_modifier:
-            return event.point_modifier(base_points)
+            return event.apply_point_modifier(base_points)
 
         return base_points
 

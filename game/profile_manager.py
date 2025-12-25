@@ -42,6 +42,20 @@ class BehavioralStats:
 
 
 @dataclass
+class HidingBehavioralStats:
+    """Player's hiding and running patterns when caught."""
+    total_caught_instances: int = 0  # Total times caught (regardless of escape)
+    hide_attempts: int = 0
+    run_attempts: int = 0
+    hide_success_rate: float = 0.0
+    run_success_rate: float = 0.0
+    favorite_hiding_spots: Dict[str, int] = field(default_factory=dict)  # spot_id -> count
+    location_specific_preferences: Dict[str, str] = field(default_factory=dict)  # location -> 'hide'|'run'
+    ai_detection_rate_by_spot: Dict[str, float] = field(default_factory=dict)  # spot_id -> detection_rate
+    risk_profile_when_caught: str = "balanced"  # "aggressive_hider", "runner", "balanced"
+
+
+@dataclass
 class AIMemoryStats:
     """AI's memory of interactions with this player."""
     times_predicted: int = 0
@@ -69,6 +83,8 @@ class MatchHistoryEntry:
     rounds_played: int
     caught: bool
     num_opponents: int
+    escapes_in_game: int = 0  # Number of successful escapes in this game
+    high_threat_escape: bool = False  # Whether player escaped with 90%+ AI threat
 
 
 @dataclass
@@ -80,6 +96,7 @@ class PlayerProfile:
     last_played: str
     stats: ProfileStats = field(default_factory=ProfileStats)
     behavioral_stats: BehavioralStats = field(default_factory=BehavioralStats)
+    hiding_stats: HidingBehavioralStats = field(default_factory=HidingBehavioralStats)
     ai_memory: AIMemoryStats = field(default_factory=AIMemoryStats)
     match_history: List[MatchHistoryEntry] = field(default_factory=list)
     achievements: Dict[str, Any] = field(default_factory=dict)
@@ -98,6 +115,12 @@ class PlayerProfile:
 
         if 'behavioral_stats' in data and isinstance(data['behavioral_stats'], dict):
             data['behavioral_stats'] = BehavioralStats(**data['behavioral_stats'])
+
+        if 'hiding_stats' in data and isinstance(data['hiding_stats'], dict):
+            data['hiding_stats'] = HidingBehavioralStats(**data['hiding_stats'])
+        elif 'hiding_stats' not in data:
+            # Backward compatibility for old profiles without hiding stats
+            data['hiding_stats'] = HidingBehavioralStats()
 
         if 'ai_memory' in data and isinstance(data['ai_memory'], dict):
             data['ai_memory'] = AIMemoryStats(**data['ai_memory'])
@@ -273,6 +296,9 @@ class ProfileManager:
         # Update behavioral stats
         self._update_behavioral_stats(profile, game_data)
 
+        # Update hiding stats
+        self._update_hiding_stats(profile, game_data)
+
         # Update match history (ring buffer - keep last 10)
         match_entry = MatchHistoryEntry(
             game_id=game_data.get('game_id', str(uuid.uuid4())),
@@ -281,7 +307,9 @@ class ProfileManager:
             final_score=game_data['final_score'],
             rounds_played=game_data['rounds_played'],
             caught=game_data.get('caught', False),
-            num_opponents=game_data.get('num_opponents', 1)
+            num_opponents=game_data.get('num_opponents', 1),
+            escapes_in_game=game_data.get('escapes_in_game', 0),
+            high_threat_escape=game_data.get('high_threat_escape', False)
         )
 
         profile.match_history.append(match_entry)
@@ -361,6 +389,51 @@ class ProfileManager:
                 # Calculate entropy-based predictability
                 max_freq = max(profile.behavioral_stats.location_frequencies.values())
                 profile.behavioral_stats.predictability_score = max_freq / total_choices
+
+    def _update_hiding_stats(self, profile: PlayerProfile, game_data: Dict[str, Any]) -> None:
+        """Update hiding/running patterns from game data."""
+        hiding_data = game_data.get('hiding_data', {})
+
+        if not hiding_data:
+            # No hiding data in this game (backward compatibility)
+            return
+
+        # Update totals
+        profile.hiding_stats.total_caught_instances += hiding_data.get('total_caught_instances', 0)
+        profile.hiding_stats.hide_attempts += hiding_data.get('hide_attempts', 0)
+        profile.hiding_stats.run_attempts += hiding_data.get('run_attempts', 0)
+
+        # Update hiding spot frequencies
+        favorite_spots = hiding_data.get('favorite_hiding_spots', {})
+        for spot_id, count in favorite_spots.items():
+            if spot_id in profile.hiding_stats.favorite_hiding_spots:
+                profile.hiding_stats.favorite_hiding_spots[spot_id] += count
+            else:
+                profile.hiding_stats.favorite_hiding_spots[spot_id] = count
+
+        # Calculate success rates
+        if profile.hiding_stats.hide_attempts > 0:
+            successful_hides = hiding_data.get('successful_hides', 0)
+            total_successful_hides = profile.hiding_stats.hide_success_rate * (profile.hiding_stats.hide_attempts - hiding_data.get('hide_attempts', 0))
+            total_successful_hides += successful_hides
+            profile.hiding_stats.hide_success_rate = total_successful_hides / profile.hiding_stats.hide_attempts
+
+        if profile.hiding_stats.run_attempts > 0:
+            successful_runs = hiding_data.get('successful_runs', 0)
+            total_successful_runs = profile.hiding_stats.run_success_rate * (profile.hiding_stats.run_attempts - hiding_data.get('run_attempts', 0))
+            total_successful_runs += successful_runs
+            profile.hiding_stats.run_success_rate = total_successful_runs / profile.hiding_stats.run_attempts
+
+        # Determine risk profile when caught
+        total_attempts = profile.hiding_stats.hide_attempts + profile.hiding_stats.run_attempts
+        if total_attempts >= 5:
+            hide_ratio = profile.hiding_stats.hide_attempts / total_attempts
+            if hide_ratio >= 0.7:
+                profile.hiding_stats.risk_profile_when_caught = "aggressive_hider"
+            elif hide_ratio <= 0.3:
+                profile.hiding_stats.risk_profile_when_caught = "runner"
+            else:
+                profile.hiding_stats.risk_profile_when_caught = "balanced"
 
     def _update_index(self) -> None:
         """Update the profiles index file for fast lookups."""

@@ -686,6 +686,103 @@ class AIPredictor:
 
         return total_threat
 
+    def predict_hide_or_run(self, player: Player, location) -> tuple:
+        """
+        Predict whether player will hide or run when caught.
+
+        Args:
+            player: Player who was caught
+            location: Location where caught (reserved for future use)
+
+        Returns:
+            Tuple of ('hide' | 'run', confidence)
+        """
+        if not hasattr(player, 'hiding_stats'):
+            return ('hide', 0.5)  # No data, assume balanced with low confidence
+
+        stats = player.hiding_stats
+        total = stats['total_hide_attempts'] + stats['total_run_attempts']
+
+        if total < 2:
+            return ('hide', 0.5)  # Not enough history
+
+        # Calculate tendency
+        hide_ratio = stats['total_hide_attempts'] / total
+
+        # Consider success rates - players tend to repeat successful strategies
+        if stats['total_hide_attempts'] > 0:
+            hide_success = stats['successful_hides'] / stats['total_hide_attempts']
+        else:
+            hide_success = 0.5
+
+        if stats['total_run_attempts'] > 0:
+            run_success = stats['successful_runs'] / stats['total_run_attempts']
+        else:
+            run_success = 0.5
+
+        # Players tend to repeat successful strategies
+        if hide_success > run_success + 0.2:
+            # Hiding is more successful - bias toward hide
+            predicted = 'hide'
+            confidence = min(0.8, hide_ratio + 0.2)
+        elif run_success > hide_success + 0.2:
+            # Running is more successful - bias toward run
+            predicted = 'run'
+            confidence = min(0.8, (1 - hide_ratio) + 0.2)
+        else:
+            # Go with historical tendency
+            predicted = 'hide' if hide_ratio > 0.5 else 'run'
+            confidence = abs(hide_ratio - 0.5) * 2  # 0 at 50%, 1 at 100%/0%
+
+        return (predicted, confidence)
+
+    def predict_hiding_spot(self, player: Player, location) -> tuple:
+        """
+        Predict which hiding spot player will choose.
+
+        Args:
+            player: Player making the choice
+            location: Location object with hiding spots
+
+        Returns:
+            Tuple of (spot_id, confidence)
+        """
+        import random
+        from game.hiding import HidingManager
+
+        hiding_mgr = HidingManager()
+        spots = hiding_mgr.get_hiding_spots_for_location(location.name)
+
+        if not spots:
+            return (None, 0.0)
+
+        if not hasattr(player, 'hiding_stats') or not player.hiding_stats['favorite_hide_spots']:
+            # No history - predict random
+            return (random.choice(spots)['id'], 0.25)
+
+        favorite_spots = player.hiding_stats['favorite_hide_spots']
+
+        # Filter to spots at this location
+        location_spot_ids = {spot['id'] for spot in spots}
+        relevant_favorites = {
+            spot_id: count
+            for spot_id, count in favorite_spots.items()
+            if spot_id in location_spot_ids
+        }
+
+        if not relevant_favorites:
+            # No history at this location
+            return (random.choice(spots)['id'], 0.25)
+
+        # Predict most used spot
+        most_used = max(relevant_favorites.items(), key=lambda x: x[1])
+        spot_id, uses = most_used
+
+        total_uses = sum(relevant_favorites.values())
+        confidence = uses / total_uses if total_uses > 0 else 0.25
+
+        return (spot_id, confidence)
+
     def reset_round(self):
         """Reset for a new round."""
         # Round number is tracked per prediction, no reset needed
