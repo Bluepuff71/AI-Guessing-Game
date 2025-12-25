@@ -170,7 +170,7 @@ class TestGetLocationsAndItems:
 
         items = config.get_items()
         assert isinstance(items, list)
-        assert len(items) == 3  # Test config has 3 items (intel_report, scout, smoke_bomb)
+        assert len(items) == 2  # Test config has 2 items (intel_report, scout)
 
     def test_get_locations_empty_on_missing_key(self, temp_config_dir):
         """Test get_locations() returns empty list when 'locations' key missing."""

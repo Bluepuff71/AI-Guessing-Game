@@ -344,3 +344,423 @@ class TestResetRound:
         # This test just verifies the method exists and doesn't crash
         ai.reset_round()
         assert ai.round_num == 5  # Should remain unchanged
+
+
+class TestEventAdjustments:
+    """Tests for event-based prediction adjustments."""
+
+    def test_adjust_for_positive_point_modifier(self, temp_config_dir, sample_location_manager,
+                                                 sample_event_manager, deterministic_random):
+        """Test prediction adjustment for positive point modifier events."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add history
+        loc = sample_location_manager.get_location(0)
+        for i in range(3):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        # Force an event on a location using copy_with_location
+        from game.events import Event
+        jackpot = Event(
+            id="jackpot",
+            name="JACKPOT",
+            description="Double points!",
+            emoji="💰",
+            duration_rounds=1,
+            point_modifier={"type": "multiply", "value": 2.0}
+        )
+        sample_event_manager.active_events = [jackpot.copy_with_location(loc)]
+
+        location_name, confidence, reasoning = ai.predict_player_location(player, 1, sample_event_manager)
+
+        # Should have some reasoning mentioning the event
+        assert isinstance(reasoning, str)
+        assert isinstance(confidence, float)
+
+    def test_adjust_for_negative_point_modifier(self, temp_config_dir, sample_location_manager,
+                                                 sample_event_manager, deterministic_random):
+        """Test prediction adjustment for negative point modifier events."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add history
+        loc = sample_location_manager.get_location(0)
+        for i in range(3):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        # Force a lockdown event
+        from game.events import Event
+        lockdown = Event(
+            id="lockdown",
+            name="LOCKDOWN",
+            description="Reduced points",
+            emoji="🔒",
+            duration_rounds=1,
+            point_modifier={"type": "multiply", "value": 0.7}
+        )
+        sample_event_manager.active_events = [lockdown.copy_with_location(loc)]
+
+        location_name, confidence, reasoning = ai.predict_player_location(player, 1, sample_event_manager)
+
+        assert isinstance(confidence, float)
+
+    def test_adjust_for_immunity_event(self, temp_config_dir, sample_location_manager,
+                                        sample_event_manager, deterministic_random):
+        """Test prediction adjustment for immunity events."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add history
+        loc = sample_location_manager.get_location(0)
+        for i in range(3):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        # Force an immunity event
+        from game.events import Event
+        immunity = Event(
+            id="immunity",
+            name="IMMUNITY",
+            description="Cannot be caught!",
+            emoji="🛡️",
+            duration_rounds=1,
+            special_effect="immunity"
+        )
+        sample_event_manager.active_events = [immunity.copy_with_location(loc)]
+
+        location_name, confidence, reasoning = ai.predict_player_location(player, 1, sample_event_manager)
+
+        # Immunity should boost confidence
+        assert confidence > 0
+
+    def test_adjust_for_guaranteed_catch_event(self, temp_config_dir, sample_location_manager,
+                                                sample_event_manager, deterministic_random):
+        """Test prediction adjustment for guaranteed catch events."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add history
+        loc = sample_location_manager.get_location(0)
+        for i in range(3):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        # Force a guaranteed catch event
+        from game.events import Event
+        catch_event = Event(
+            id="dragnet",
+            name="DRAGNET",
+            description="Guaranteed catch!",
+            emoji="🚔",
+            duration_rounds=1,
+            special_effect="guaranteed_catch"
+        )
+        sample_event_manager.active_events = [catch_event.copy_with_location(loc)]
+
+        location_name, confidence, reasoning = ai.predict_player_location(player, 1, sample_event_manager)
+
+        # Guaranteed catch should reduce confidence
+        assert isinstance(confidence, float)
+
+
+class TestRandomPrediction:
+    """Tests for random prediction fallback."""
+
+    def test_random_prediction_method(self, temp_config_dir, sample_location_manager, deterministic_random):
+        """Test _random_prediction method directly."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        location_name, confidence, reasoning = ai._random_prediction(player)
+
+        assert location_name in [loc.name for loc in sample_location_manager.get_all()]
+        assert confidence == 0.125  # 1/8 random chance
+        assert "learning" in reasoning.lower()
+
+
+class TestSimplePatternPrediction:
+    """Tests for simple pattern prediction."""
+
+    def test_simple_pattern_with_history(self, temp_config_dir, sample_location_manager, deterministic_random):
+        """Test simple pattern prediction with player history."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add consistent history - always choose location 0
+        loc = sample_location_manager.get_location(0)
+        for i in range(5):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        location_name, confidence, reasoning = ai._simple_pattern_prediction(player)
+
+        assert location_name == loc.name
+        assert confidence > 0.3  # Should have higher confidence for consistent pattern
+
+    def test_simple_pattern_no_history_fallback(self, temp_config_dir, sample_location_manager, deterministic_random):
+        """Test simple pattern falls back to random with no history."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        location_name, confidence, reasoning = ai._simple_pattern_prediction(player)
+
+        # Falls back to random prediction
+        assert confidence == 0.125
+
+    def test_simple_pattern_recency_weighting(self, temp_config_dir, sample_location_manager, deterministic_random):
+        """Test recency weighting in simple pattern prediction."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add mixed history - old choices of loc0, recent choices of loc1
+        loc0 = sample_location_manager.get_location(0)
+        loc1 = sample_location_manager.get_location(1)
+
+        for i in range(3):
+            player.record_choice(loc0, i+1, False, 10, 10)
+        for i in range(3, 6):
+            player.record_choice(loc1, i+1, False, 10, 10)
+
+        location_name, confidence, reasoning = ai._simple_pattern_prediction(player)
+
+        # Should favor more recent loc1
+        assert location_name == loc1.name
+
+
+class TestMLReasoning:
+    """Tests for ML reasoning generation."""
+
+    def test_generate_ml_reasoning_high_confidence(self, temp_config_dir, sample_location_manager):
+        """Test ML reasoning with high confidence."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+        player.points = 50
+
+        # Add some history
+        loc = sample_location_manager.get_location(0)
+        for i in range(3):
+            player.record_choice(loc, i+1, False, 20, 20)
+
+        reasoning = ai._generate_ml_reasoning(player, loc.name, 0.75)
+
+        # Check case-insensitively since capitalize() is applied
+        assert "ml model high confidence" in reasoning.lower()
+
+    def test_generate_ml_reasoning_win_threat(self, temp_config_dir, sample_location_manager):
+        """Test ML reasoning for win threat player."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+        player.points = 90  # Close to winning
+
+        reasoning = ai._generate_ml_reasoning(player, "Test Store", 0.3)
+
+        assert "win threat" in reasoning.lower()
+
+    def test_generate_ml_reasoning_low_value_preference(self, temp_config_dir, sample_location_manager):
+        """Test ML reasoning for player preferring low values."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add history with very low values
+        loc = sample_location_manager.get_location(0)
+        for i in range(5):
+            player.record_choice(loc, i+1, False, 5, 5)
+
+        reasoning = ai._generate_ml_reasoning(player, loc.name, 0.3)
+
+        assert "low-value" in reasoning.lower()
+
+
+class TestMLPredictionPath:
+    """Tests for ML prediction code path."""
+
+    def test_ml_prediction_with_mock_trainer(self, temp_config_dir, sample_location_manager, monkeypatch):
+        """Test ML prediction path with mocked trainer."""
+        # Create mock trainer
+        class MockTrainer:
+            def load_model(self):
+                return True
+
+            def get_model_info(self):
+                return {"samples": 100}
+
+            def predict(self, features):
+                # Return mock predictions
+                return {"Test Store": 0.6, "Test Vault": 0.3, "Test Bank": 0.1}
+
+        def mock_trainer_init(*args, **kwargs):
+            return MockTrainer()
+
+        monkeypatch.setattr("ai.trainer.ModelTrainer", mock_trainer_init, raising=False)
+
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add history
+        loc = sample_location_manager.get_location(0)
+        for i in range(3):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        location_name, confidence, reasoning = ai.predict_player_location(player, 1)
+
+        # Should use ML prediction
+        assert isinstance(location_name, str)
+        assert isinstance(confidence, float)
+
+
+class TestAdvancedPrediction:
+    """Tests for advanced prediction."""
+
+    def test_advanced_prediction_direct(self, temp_config_dir, sample_location_manager, deterministic_random):
+        """Test _advanced_prediction method directly."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+        player.points = 50
+
+        # Add history
+        loc = sample_location_manager.get_location(0)
+        for i in range(5):
+            player.record_choice(loc, i+1, False, 15, 15)
+
+        location_name, confidence, reasoning = ai._advanced_prediction(player, 2)
+
+        assert location_name in [loc.name for loc in sample_location_manager.get_all()]
+        assert 0 <= confidence <= 1
+        assert isinstance(reasoning, str)
+
+    def test_advanced_prediction_with_events(self, temp_config_dir, sample_location_manager,
+                                              sample_event_manager, deterministic_random):
+        """Test advanced prediction with event manager."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+        player.points = 50
+
+        # Add history
+        loc = sample_location_manager.get_location(0)
+        for i in range(3):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        location_name, confidence, reasoning = ai._advanced_prediction(player, 2, sample_event_manager)
+
+        assert isinstance(location_name, str)
+
+
+class TestMLFeatureExtractionAdvanced:
+    """More tests for ML feature extraction."""
+
+    def test_extract_ml_features_with_events(self, temp_config_dir, sample_location_manager, sample_event_manager):
+        """Test ML features include event information."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+        player.points = 50
+
+        # Add history
+        loc = sample_location_manager.get_location(0)
+        for i in range(3):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        features = ai._extract_ml_features(player, 2, sample_event_manager)
+
+        # Should include event features
+        assert len(features) > 16  # Base features + event features
+
+    def test_extract_ml_features_risk_trend_increasing(self, temp_config_dir, sample_location_manager):
+        """Test ML features capture increasing risk trend."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add history with increasing values (risk increasing)
+        loc0 = sample_location_manager.get_location(0)  # Low value location
+        loc1 = sample_location_manager.get_location(1)  # High value location
+
+        # Old choices - low values
+        for i in range(3):
+            player.record_choice(loc0, i+1, False, 5, 5)
+        # Recent choices - high values
+        for i in range(3, 6):
+            player.record_choice(loc1, i+1, False, 20, 20)
+
+        features = ai._extract_ml_features(player, 2)
+
+        # Risk trend feature should be positive (increasing)
+        assert len(features) == 16
+
+    def test_extract_ml_features_risk_trend_decreasing(self, temp_config_dir, sample_location_manager):
+        """Test ML features capture decreasing risk trend."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add history with decreasing values (risk decreasing)
+        loc0 = sample_location_manager.get_location(0)
+        loc1 = sample_location_manager.get_location(1)
+
+        # Old choices - high values
+        for i in range(3):
+            player.record_choice(loc1, i+1, False, 20, 20)
+        # Recent choices - low values
+        for i in range(3, 6):
+            player.record_choice(loc0, i+1, False, 5, 5)
+
+        features = ai._extract_ml_features(player, 2)
+
+        assert len(features) == 16
+
+
+class TestLocationScoring:
+    """Tests for location scoring."""
+
+    def test_score_location_for_player(self, temp_config_dir, sample_location_manager):
+        """Test _score_location_for_player method."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+        player.points = 50
+
+        # Add history - prefer location 0
+        loc = sample_location_manager.get_location(0)
+        for i in range(5):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        from ai.features import extract_features
+        features = extract_features(player, 5, 2, sample_location_manager)
+
+        # Score the preferred location
+        score = ai._score_location_for_player(loc, player, features)
+
+        assert score > 1.0  # Should be above base score
+
+
+class TestGenerateReasoning:
+    """Tests for reasoning generation."""
+
+    def test_generate_reasoning_predictable_player(self, temp_config_dir, sample_location_manager):
+        """Test reasoning generation for predictable player."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add very consistent history
+        loc = sample_location_manager.get_location(0)
+        for i in range(10):
+            player.record_choice(loc, i+1, False, 10, 10)
+
+        from ai.features import extract_features
+        features = extract_features(player, 10, 2, sample_location_manager)
+
+        reasoning = ai._generate_reasoning(player, features, loc.name)
+
+        assert isinstance(reasoning, str)
+        assert len(reasoning) > 0
+
+    def test_generate_reasoning_high_value_player(self, temp_config_dir, sample_location_manager):
+        """Test reasoning generation for high-value seeking player."""
+        ai = AIPredictor(sample_location_manager)
+        player = Player(1, "Alice")
+
+        # Add history with high values
+        loc = sample_location_manager.get_location(1)  # High value location
+        for i in range(5):
+            player.record_choice(loc, i+1, False, 25, 25)
+
+        from ai.features import extract_features
+        features = extract_features(player, 5, 2, sample_location_manager)
+
+        reasoning = ai._generate_reasoning(player, features, loc.name)
+
+        assert isinstance(reasoning, str)

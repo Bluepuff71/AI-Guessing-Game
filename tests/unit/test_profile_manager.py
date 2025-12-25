@@ -234,8 +234,10 @@ class TestProfileManager:
         profile1 = pm.create_profile("Alice")
         profile2 = pm.create_profile("Bob")
 
-        # Update Bob's last_played to be more recent
-        profile2.last_played = "2025-12-25T12:00:00Z"
+        # Set Alice to an older date, Bob to a more recent date
+        profile1.last_played = "2025-01-01T00:00:00Z"
+        profile2.last_played = "2025-12-31T23:59:59Z"
+        pm.save_profile(profile1)
         pm.save_profile(profile2)
 
         profiles = pm.list_all_profiles()
@@ -503,3 +505,278 @@ class TestProfileIndex:
             index_data = json.load(f)
 
         assert index_data['total_profiles'] == 2
+
+
+class TestHidingStats:
+    """Tests for hiding stats updates."""
+
+    def test_update_hiding_stats_basic(self, temp_profile_dir):
+        """Test updating hiding stats from game data."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        game_data = {
+            'game_id': str(uuid.uuid4()),
+            'outcome': 'win',
+            'final_score': 100,
+            'rounds_played': 10,
+            'caught': False,
+            'num_opponents': 1,
+            'locations_chosen': ['Bank Heist'],
+            'items_used': [],
+            'hiding_data': {
+                'total_caught_instances': 2,
+                'total_escapes': 1,
+                'hide_attempts': 1,
+                'run_attempts': 1,
+                'successful_hides': 1,
+                'successful_runs': 0,
+                'favorite_escape_options': {'store_stockroom': 1, 'store_backdoor': 1},
+                'escape_option_history': ['store_stockroom', 'store_backdoor'],
+                'ai_correct_predictions': 1
+            }
+        }
+
+        pm.update_stats_after_game(profile.profile_id, game_data)
+        updated = pm.load_profile(profile.profile_id)
+
+        assert updated.hiding_stats.total_caught_instances == 2
+        assert updated.hiding_stats.total_escapes == 1
+        assert updated.hiding_stats.hide_attempts == 1
+        assert updated.hiding_stats.run_attempts == 1
+
+    def test_update_hiding_stats_accumulative(self, temp_profile_dir):
+        """Test hiding stats accumulate across games."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        # First game
+        game_data1 = {
+            'game_id': 'game-1',
+            'outcome': 'win',
+            'final_score': 100,
+            'rounds_played': 10,
+            'caught': False,
+            'num_opponents': 1,
+            'locations_chosen': [],
+            'items_used': [],
+            'hiding_data': {
+                'total_caught_instances': 2,
+                'total_escapes': 2,
+                'hide_attempts': 2,
+                'run_attempts': 0,
+                'successful_hides': 2,
+                'successful_runs': 0,
+                'favorite_escape_options': {'store_stockroom': 2},
+                'escape_option_history': ['store_stockroom', 'store_stockroom'],
+                'ai_correct_predictions': 0
+            }
+        }
+        pm.update_stats_after_game(profile.profile_id, game_data1)
+
+        # Second game
+        game_data2 = {
+            'game_id': 'game-2',
+            'outcome': 'win',
+            'final_score': 100,
+            'rounds_played': 10,
+            'caught': False,
+            'num_opponents': 1,
+            'locations_chosen': [],
+            'items_used': [],
+            'hiding_data': {
+                'total_caught_instances': 3,
+                'total_escapes': 2,
+                'hide_attempts': 1,
+                'run_attempts': 2,
+                'successful_hides': 0,
+                'successful_runs': 2,
+                'favorite_escape_options': {'store_backdoor': 3},
+                'escape_option_history': ['store_backdoor', 'store_backdoor', 'store_backdoor'],
+                'ai_correct_predictions': 1
+            }
+        }
+        pm.update_stats_after_game(profile.profile_id, game_data2)
+
+        updated = pm.load_profile(profile.profile_id)
+
+        assert updated.hiding_stats.total_caught_instances == 5  # 2 + 3
+        assert updated.hiding_stats.total_escapes == 4  # 2 + 2
+        assert updated.hiding_stats.hide_attempts == 3  # 2 + 1
+        assert updated.hiding_stats.run_attempts == 2  # 0 + 2
+
+    def test_hiding_stats_risk_profile_aggressive_hider(self, temp_profile_dir):
+        """Test risk profile becomes aggressive_hider when favoring hiding."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        # Game data with strong hide preference (>=70% hides)
+        game_data = {
+            'game_id': 'game-1',
+            'outcome': 'win',
+            'final_score': 100,
+            'rounds_played': 10,
+            'caught': False,
+            'num_opponents': 1,
+            'locations_chosen': [],
+            'items_used': [],
+            'hiding_data': {
+                'total_caught_instances': 10,
+                'total_escapes': 8,
+                'hide_attempts': 8,  # 80% hide
+                'run_attempts': 2,
+                'successful_hides': 7,
+                'successful_runs': 1,
+                'favorite_escape_options': {},
+                'escape_option_history': [],
+                'ai_correct_predictions': 2
+            }
+        }
+        pm.update_stats_after_game(profile.profile_id, game_data)
+
+        updated = pm.load_profile(profile.profile_id)
+        assert updated.hiding_stats.risk_profile_when_caught == "aggressive_hider"
+
+    def test_hiding_stats_risk_profile_runner(self, temp_profile_dir):
+        """Test risk profile becomes runner when favoring running."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        # Game data with strong run preference (<=30% hides)
+        game_data = {
+            'game_id': 'game-1',
+            'outcome': 'win',
+            'final_score': 100,
+            'rounds_played': 10,
+            'caught': False,
+            'num_opponents': 1,
+            'locations_chosen': [],
+            'items_used': [],
+            'hiding_data': {
+                'total_caught_instances': 10,
+                'total_escapes': 8,
+                'hide_attempts': 2,  # 20% hide
+                'run_attempts': 8,
+                'successful_hides': 1,
+                'successful_runs': 7,
+                'favorite_escape_options': {},
+                'escape_option_history': [],
+                'ai_correct_predictions': 2
+            }
+        }
+        pm.update_stats_after_game(profile.profile_id, game_data)
+
+        updated = pm.load_profile(profile.profile_id)
+        assert updated.hiding_stats.risk_profile_when_caught == "runner"
+
+    def test_hiding_stats_risk_profile_balanced(self, temp_profile_dir):
+        """Test risk profile stays balanced with mixed choices."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        # Game data with balanced preference
+        game_data = {
+            'game_id': 'game-1',
+            'outcome': 'win',
+            'final_score': 100,
+            'rounds_played': 10,
+            'caught': False,
+            'num_opponents': 1,
+            'locations_chosen': [],
+            'items_used': [],
+            'hiding_data': {
+                'total_caught_instances': 10,
+                'total_escapes': 8,
+                'hide_attempts': 5,  # 50% hide
+                'run_attempts': 5,
+                'successful_hides': 4,
+                'successful_runs': 4,
+                'favorite_escape_options': {},
+                'escape_option_history': [],
+                'ai_correct_predictions': 2
+            }
+        }
+        pm.update_stats_after_game(profile.profile_id, game_data)
+
+        updated = pm.load_profile(profile.profile_id)
+        assert updated.hiding_stats.risk_profile_when_caught == "balanced"
+
+    def test_hiding_stats_escape_option_history_limit(self, temp_profile_dir):
+        """Test escape option history is limited to last 20 entries."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        # Add many games with escape history
+        for i in range(5):
+            game_data = {
+                'game_id': f'game-{i}',
+                'outcome': 'win',
+                'final_score': 100,
+                'rounds_played': 10,
+                'caught': False,
+                'num_opponents': 1,
+                'locations_chosen': [],
+                'items_used': [],
+                'hiding_data': {
+                    'total_caught_instances': 5,
+                    'total_escapes': 5,
+                    'hide_attempts': 5,
+                    'run_attempts': 0,
+                    'successful_hides': 5,
+                    'successful_runs': 0,
+                    'favorite_escape_options': {f'option_{i}': 5},
+                    'escape_option_history': [f'option_{i}'] * 10,  # 10 per game = 50 total
+                    'ai_correct_predictions': 0
+                }
+            }
+            pm.update_stats_after_game(profile.profile_id, game_data)
+
+        updated = pm.load_profile(profile.profile_id)
+        # Should only keep last 20 entries
+        assert len(updated.hiding_stats.escape_option_history) <= 20
+
+    def test_hiding_stats_no_data_backward_compat(self, temp_profile_dir):
+        """Test games without hiding_data don't crash."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        # Game data without hiding_data field
+        game_data = {
+            'game_id': 'game-1',
+            'outcome': 'win',
+            'final_score': 100,
+            'rounds_played': 10,
+            'caught': False,
+            'num_opponents': 1,
+            'locations_chosen': ['Bank Heist'],
+            'items_used': []
+            # No 'hiding_data' key
+        }
+        pm.update_stats_after_game(profile.profile_id, game_data)
+
+        updated = pm.load_profile(profile.profile_id)
+        # Should not crash, hiding stats should remain at defaults
+        assert updated.hiding_stats.total_caught_instances == 0
+
+
+class TestLocationPreferences:
+    """Tests for location preference analysis."""
+
+    def test_get_location_preferences_empty(self, temp_profile_dir):
+        """Test preferences with no history."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        preferences = pm.get_location_preferences(profile)
+        assert preferences == {}
+
+    def test_get_location_preferences_single(self, temp_profile_dir):
+        """Test preferences with single location history."""
+        pm = ProfileManager()
+        profile = pm.create_profile("Alice")
+
+        profile.behavioral_stats.location_frequencies = {'Bank Heist': 10}
+        pm.save_profile(profile)
+
+        preferences = pm.get_location_preferences(profile)
+        assert preferences == {'Bank Heist': 1.0}

@@ -67,12 +67,26 @@ class TestStandingsDisplay:
         assert "50" in result
         assert "30" in result
 
-    def test_print_standings_with_items(self, mock_console, temp_config_dir):
-        """Test print_standings displays player items."""
+    def test_print_standings_with_passives(self, mock_console, temp_config_dir, temp_passives_config, monkeypatch):
+        """Test print_standings displays player passives."""
+        from game.config_loader import ConfigLoader
+        from game.passives import PassiveShop, PassiveType
+
+        ConfigLoader._instance = None
+        new_config = ConfigLoader()
+
+        from game import config_loader
+        monkeypatch.setattr(config_loader, 'config', new_config)
+        PassiveShop.PASSIVES = None
+
         console, output = mock_console
         player = Player(1, "Alice")
         player.points = 50
-        player.items.append(ItemShop.get_item(ItemType.SCOUT))
+
+        # Give player a passive
+        passive = PassiveShop.get_passive(PassiveType.AI_WHISPERER)
+        if passive:
+            player.passive_manager.add_passive(passive)
 
         print_standings([player])
 
@@ -216,9 +230,8 @@ class TestPassiveShopDisplay:
         ConfigLoader._instance = None
         new_config = ConfigLoader()
 
-        from game import config_loader, passives as passives_module
+        from game import config_loader
         monkeypatch.setattr(config_loader, 'config', new_config)
-        monkeypatch.setattr(passives_module, 'config', new_config)
 
         PassiveShop.PASSIVES = None
 
@@ -240,9 +253,8 @@ class TestPassiveShopDisplay:
         ConfigLoader._instance = None
         new_config = ConfigLoader()
 
-        from game import config_loader, passives as passives_module
+        from game import config_loader
         monkeypatch.setattr(config_loader, 'config', new_config)
-        monkeypatch.setattr(passives_module, 'config', new_config)
 
         PassiveShop.PASSIVES = None
 
@@ -305,15 +317,17 @@ class TestIntelReport:
     def test_show_intel_report_with_ai_memory(self, mock_console, temp_config_dir):
         """Test show_intel_report with AI memory data."""
         from game.ui import show_intel_report
-        from unittest.mock import Mock
 
         console, output = mock_console
         player = Player(1, "Alice")
 
-        ai_memory = Mock()
-        ai_memory.games_played = 5
-        ai_memory.has_personal_model = True
-        ai_memory.model_trained_date = "2024-01-15"
+        ai_memory = {
+            'favorite_location': 'Test Store',
+            'risk_profile': 'aggressive',
+            'catch_rate': 0.25,
+            'has_personal_model': True,
+            'total_games': 5
+        }
 
         show_intel_report(
             player,
@@ -349,7 +363,7 @@ class TestRevealPhase:
         player = Player(1, "Alice")
         loc = Location("Test Store", "🏪", 5, 10)
 
-        print_player_choice(player, loc, "Other Location", is_match=False)
+        print_player_choice(player, loc, "Other Location", confidence=0.6, reasoning="Pattern detected")
 
         result = output.getvalue()
         assert "Alice" in result
@@ -362,7 +376,7 @@ class TestRevealPhase:
         player = Player(1, "Alice")
         loc = Location("Test Store", "🏪", 5, 10)
 
-        print_player_choice(player, loc, "Test Store", is_match=True)
+        print_player_choice(player, loc, "Test Store", confidence=0.9, reasoning="High confidence")
 
         result = output.getvalue()
         assert "Alice" in result
@@ -377,7 +391,8 @@ class TestRevealPhase:
         print_search_result(loc)
 
         result = output.getvalue()
-        assert "Test Store" in result
+        # Output may use uppercase for display
+        assert "test store" in result.lower()
 
     def test_print_search_result_with_previous(self, mock_console, temp_config_dir):
         """Test print_search_result with previous location."""
@@ -409,18 +424,22 @@ class TestProfileUI:
     def test_print_profile_selection_menu_with_profiles(self, mock_console):
         """Test profile menu with existing profiles."""
         from game.ui import print_profile_selection_menu
-        from unittest.mock import Mock
+        from dataclasses import dataclass
+        from datetime import datetime, timezone
 
         console, output = mock_console
 
-        profile1 = Mock()
-        profile1.name = "Player1"
-        profile1.id = "p1"
-        profile1.stats = Mock()
-        profile1.stats.games_played = 10
-        profile1.stats.wins = 5
+        @dataclass
+        class MockProfile:
+            name: str = "Player1"
+            id: str = "p1"
+            last_played: str = datetime.now(timezone.utc).isoformat()
+            wins: int = 5
+            losses: int = 5
+            total_games: int = 10
+            win_rate: float = 0.5
 
-        profiles = [profile1]
+        profiles = [MockProfile()]
         print_profile_selection_menu(profiles)
 
         result = output.getvalue()
@@ -437,17 +456,40 @@ class TestProfileUI:
 
         assert result == "1"
 
-    def test_print_current_profile(self, mock_console):
+    def test_print_current_profile(self, mock_console, monkeypatch):
         """Test print_current_profile displays profile info."""
         from game.ui import print_current_profile
-        from unittest.mock import Mock
+        from dataclasses import dataclass
 
         console, output = mock_console
 
-        profile = Mock()
-        profile.name = "TestPlayer"
-        profile.id = "test123"
+        @dataclass
+        class MockStats:
+            wins: int = 5
+            losses: int = 3
 
+        @dataclass
+        class MockAIMemory:
+            has_personal_model: bool = False
+
+        @dataclass
+        class MockProfile:
+            name: str = "TestPlayer"
+            id: str = "test123"
+            stats: MockStats = None
+            ai_memory: MockAIMemory = None
+
+            def __post_init__(self):
+                if self.stats is None:
+                    self.stats = MockStats()
+                if self.ai_memory is None:
+                    self.ai_memory = MockAIMemory()
+
+        # Mock ProfileManager.get_play_style
+        from game import profile_manager
+        monkeypatch.setattr(profile_manager.ProfileManager, 'get_play_style', lambda self, p: "Balanced")
+
+        profile = MockProfile()
         print_current_profile(profile)
 
         result = output.getvalue()
@@ -492,9 +534,12 @@ class TestHidingUI:
         """Test print_escape_result for successful escape."""
         from game.ui import print_escape_result
         import game.animations as animations
+        import game.ui as ui_module
 
         # Mock animations to avoid actual display
         monkeypatch.setattr(animations, 'play_escape_animation', lambda: None)
+        # Mock console.input to avoid stdin issue
+        monkeypatch.setattr(ui_module.console, 'input', lambda *args, **kwargs: "")
 
         console, output = mock_console
         player = Player(1, "Alice")
@@ -518,8 +563,11 @@ class TestHidingUI:
         """Test print_escape_result for failed escape."""
         from game.ui import print_escape_result
         import game.animations as animations
+        import game.ui as ui_module
 
         monkeypatch.setattr(animations, 'play_elimination_animation', lambda: None)
+        # Mock console.input to avoid stdin issue
+        monkeypatch.setattr(ui_module.console, 'input', lambda *args, **kwargs: "")
 
         console, output = mock_console
         player = Player(1, "Alice")

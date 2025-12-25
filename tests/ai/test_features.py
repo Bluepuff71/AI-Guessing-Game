@@ -298,3 +298,299 @@ class TestGenerateInsights:
         assert isinstance(insights['patterns'], list)
         assert isinstance(insights['tips'], list)
         assert isinstance(insights['predictability'], float)
+
+
+class TestExtractHidingFeatures:
+    """Tests for extract_hiding_features function."""
+
+    def test_extract_hiding_features_no_stats(self, temp_config_dir):
+        """Test feature extraction when player has no hiding stats."""
+        from ai.features import extract_hiding_features
+
+        player = Player(1, "Alice")
+        # Remove hiding_stats if it exists (for players without escape attempts)
+        if hasattr(player, 'hiding_stats'):
+            delattr(player, 'hiding_stats')
+
+        features = extract_hiding_features(player)
+
+        assert features['hide_vs_run_ratio'] == 0.5
+        assert features['hide_success_rate'] == 0.0
+        assert features['run_success_rate'] == 0.0
+        assert features['total_escape_attempts'] == 0
+        assert features['predictability_when_caught'] == 0.5
+
+    def test_extract_hiding_features_with_stats(self, temp_config_dir):
+        """Test feature extraction with hiding statistics."""
+        from ai.features import extract_hiding_features
+
+        player = Player(1, "Alice")
+        # Set up hiding stats
+        player.hiding_stats = {
+            'total_hide_attempts': 5,
+            'successful_hides': 3,
+            'total_run_attempts': 3,
+            'successful_runs': 2,
+            'favorite_hide_spots': {'spot_a': 3, 'spot_b': 2},
+            'hide_vs_run_ratio': 0.625
+        }
+
+        features = extract_hiding_features(player)
+
+        assert features['hide_vs_run_ratio'] == 5 / 8  # 5 hides, 3 runs
+        assert features['hide_success_rate'] == 3 / 5  # 3/5 successful hides
+        assert features['run_success_rate'] == 2 / 3  # 2/3 successful runs
+        assert features['total_escape_attempts'] == 8
+        assert 0.0 <= features['predictability_when_caught'] <= 1.0
+
+    def test_extract_hiding_features_hide_preference(self, temp_config_dir):
+        """Test feature extraction with strong hide preference."""
+        from ai.features import extract_hiding_features
+
+        player = Player(1, "Alice")
+        # Set up hiding stats with strong hide preference
+        player.hiding_stats = {
+            'total_hide_attempts': 8,
+            'successful_hides': 6,
+            'total_run_attempts': 2,
+            'successful_runs': 1,
+            'favorite_hide_spots': {'spot_a': 6, 'spot_b': 2},
+            'hide_vs_run_ratio': 0.8
+        }
+
+        features = extract_hiding_features(player)
+
+        assert features['hide_vs_run_ratio'] == 0.8  # 8/10
+
+
+class TestCalculateHidePredictability:
+    """Tests for calculate_hide_predictability function."""
+
+    def test_hide_predictability_no_stats(self, temp_config_dir):
+        """Test predictability when player has no hiding stats."""
+        from ai.features import calculate_hide_predictability
+
+        player = Player(1, "Alice")
+        if hasattr(player, 'hiding_stats'):
+            delattr(player, 'hiding_stats')
+
+        pred = calculate_hide_predictability(player)
+        assert pred == 0.5  # Default moderate predictability
+
+    def test_hide_predictability_consistent_spots(self, temp_config_dir):
+        """Test high predictability when player uses same spots."""
+        from ai.features import calculate_hide_predictability
+
+        player = Player(1, "Alice")
+        # Set up hiding stats with consistent spot usage
+        player.hiding_stats = {
+            'total_hide_attempts': 10,
+            'successful_hides': 5,
+            'total_run_attempts': 2,
+            'successful_runs': 1,
+            'favorite_hide_spots': {'spot_a': 10},  # Always same spot
+            'hide_vs_run_ratio': 0.83
+        }
+
+        pred = calculate_hide_predictability(player)
+        # Should be highly predictable
+        assert pred > 0.6
+
+    def test_hide_predictability_varied_spots(self, temp_config_dir):
+        """Test lower predictability with varied hiding spots."""
+        from ai.features import calculate_hide_predictability
+
+        player = Player(1, "Alice")
+        # Set up hiding stats with varied spot usage
+        player.hiding_stats = {
+            'total_hide_attempts': 10,
+            'successful_hides': 5,
+            'total_run_attempts': 10,  # Equal hide/run
+            'successful_runs': 5,
+            'favorite_hide_spots': {'spot_a': 3, 'spot_b': 3, 'spot_c': 2, 'spot_d': 2},
+            'hide_vs_run_ratio': 0.5
+        }
+
+        pred = calculate_hide_predictability(player)
+        # Should be less predictable
+        assert pred < 0.6
+
+    def test_hide_predictability_few_attempts(self, temp_config_dir):
+        """Test predictability with very few attempts."""
+        from ai.features import calculate_hide_predictability
+
+        player = Player(1, "Alice")
+        # Set up hiding stats with few attempts
+        player.hiding_stats = {
+            'total_hide_attempts': 1,
+            'successful_hides': 1,
+            'total_run_attempts': 1,
+            'successful_runs': 1,
+            'favorite_hide_spots': {'spot_a': 1},
+            'hide_vs_run_ratio': 0.5
+        }
+
+        pred = calculate_hide_predictability(player)
+        # Should be in valid range
+        assert 0.0 <= pred <= 1.0
+
+    def test_hide_predictability_no_favorite_spots(self, temp_config_dir):
+        """Test predictability with empty favorite spots."""
+        from ai.features import calculate_hide_predictability
+
+        player = Player(1, "Alice")
+        player.hiding_stats = {
+            'total_hide_attempts': 5,
+            'successful_hides': 3,
+            'total_run_attempts': 5,
+            'successful_runs': 3,
+            'favorite_hide_spots': {},  # Empty spots dict
+            'hide_vs_run_ratio': 0.5
+        }
+
+        pred = calculate_hide_predictability(player)
+        # Should handle empty spots gracefully
+        assert 0.0 <= pred <= 1.0
+
+
+class TestGenerateInsightsWithHiding:
+    """Tests for generate_insights with hiding stats."""
+
+    def test_insights_escape_master(self, temp_config_dir):
+        """Test detection of escape master pattern."""
+        player = Player(1, "Alice")
+
+        # Add some regular history
+        loc = Location("Test", "🏪", 5, 10)
+        for i in range(5):
+            player.record_choice(loc, i+1, False, 7)
+
+        # Set up great escape stats
+        player.hide_run_history = [
+            {'escaped': True}, {'escaped': True}, {'escaped': True},
+            {'escaped': True}, {'escaped': True}
+        ]
+        player.hiding_stats = {
+            'total_hide_attempts': 3,
+            'successful_hides': 3,
+            'total_run_attempts': 2,
+            'successful_runs': 2,
+            'favorite_hide_spots': {'spot_a': 2, 'spot_b': 1},
+            'hide_vs_run_ratio': 0.6
+        }
+
+        insights = generate_insights(player, num_locations=5)
+
+        # Should detect escape master
+        assert any("Escape master" in p for p in insights['patterns'])
+
+    def test_insights_caught_often(self, temp_config_dir):
+        """Test detection of frequently caught pattern."""
+        player = Player(1, "Alice")
+
+        # Add some regular history
+        loc = Location("Test", "🏪", 5, 10)
+        for i in range(5):
+            player.record_choice(loc, i+1, False, 7)
+
+        # Set up poor escape stats
+        player.hide_run_history = [
+            {'escaped': False}, {'escaped': False}, {'escaped': False},
+            {'escaped': True}, {'escaped': False}
+        ]
+        player.hiding_stats = {
+            'total_hide_attempts': 3,
+            'successful_hides': 0,
+            'total_run_attempts': 2,
+            'successful_runs': 1,
+            'favorite_hide_spots': {'spot_a': 2, 'spot_b': 1},
+            'hide_vs_run_ratio': 0.6
+        }
+
+        insights = generate_insights(player, num_locations=5)
+
+        # Should detect caught often
+        assert any("Caught often" in p for p in insights['patterns'])
+
+    def test_insights_hide_preference(self, temp_config_dir):
+        """Test detection of hide preference pattern."""
+        player = Player(1, "Alice")
+
+        # Add some regular history
+        loc = Location("Test", "🏪", 5, 10)
+        for i in range(5):
+            player.record_choice(loc, i+1, False, 7)
+
+        # Set up strong hide preference
+        player.hide_run_history = [
+            {'escaped': True}, {'escaped': True}, {'escaped': True},
+            {'escaped': True}, {'escaped': True}
+        ]
+        player.hiding_stats = {
+            'total_hide_attempts': 8,
+            'successful_hides': 6,
+            'total_run_attempts': 2,
+            'successful_runs': 1,
+            'favorite_hide_spots': {'spot_a': 5, 'spot_b': 3},
+            'hide_vs_run_ratio': 0.8
+        }
+
+        insights = generate_insights(player, num_locations=5)
+
+        # Should detect hide preference
+        assert any("Hide preference" in p for p in insights['patterns'])
+
+    def test_insights_runner(self, temp_config_dir):
+        """Test detection of runner pattern."""
+        player = Player(1, "Alice")
+
+        # Add some regular history
+        loc = Location("Test", "🏪", 5, 10)
+        for i in range(5):
+            player.record_choice(loc, i+1, False, 7)
+
+        # Set up strong run preference
+        player.hide_run_history = [
+            {'escaped': True}, {'escaped': True}, {'escaped': True},
+            {'escaped': True}, {'escaped': True}
+        ]
+        player.hiding_stats = {
+            'total_hide_attempts': 2,
+            'successful_hides': 1,
+            'total_run_attempts': 8,
+            'successful_runs': 6,
+            'favorite_hide_spots': {'spot_a': 1, 'spot_b': 1},
+            'hide_vs_run_ratio': 0.2
+        }
+
+        insights = generate_insights(player, num_locations=5)
+
+        # Should detect runner pattern
+        assert any("Runner" in p for p in insights['patterns'])
+
+    def test_insights_favorite_hiding_spot(self, temp_config_dir):
+        """Test detection of favorite hiding spot pattern."""
+        player = Player(1, "Alice")
+
+        # Add some regular history
+        loc = Location("Test", "🏪", 5, 10)
+        for i in range(5):
+            player.record_choice(loc, i+1, False, 7)
+
+        # Set up stats with clear favorite spot
+        player.hide_run_history = [
+            {'escaped': True}, {'escaped': True}, {'escaped': True}
+        ]
+        player.hiding_stats = {
+            'total_hide_attempts': 5,
+            'successful_hides': 3,
+            'total_run_attempts': 2,
+            'successful_runs': 1,
+            'favorite_hide_spots': {'behind_boxes': 4, 'freezer': 1},
+            'hide_vs_run_ratio': 0.7
+        }
+
+        insights = generate_insights(player, num_locations=5)
+
+        # Should detect favorite hiding spot
+        assert any("Favorite hiding spot" in p for p in insights['patterns'])

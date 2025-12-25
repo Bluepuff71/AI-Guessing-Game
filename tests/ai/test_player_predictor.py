@@ -130,7 +130,7 @@ class TestPersonalModelTraining:
         mock_pm = Mock()
         mock_pm.load_profile.return_value = None
 
-        with patch('ai.player_predictor.ProfileManager', return_value=mock_pm):
+        with patch('game.profile_manager.ProfileManager', return_value=mock_pm):
             predictor = PlayerPredictor(
                 profile_id=temp_profile_with_games['profile_id'],
                 data_dir=temp_profile_with_games['data_dir']
@@ -156,16 +156,22 @@ class TestModelPersistence:
         result = predictor.load_model()
         assert result is False
 
-    def test_save_and_load_model(self, tmp_path, mock_ml_model):
+    def test_save_and_load_model(self, tmp_path):
         """Test saving and loading a model."""
         from ai.player_predictor import PlayerPredictor
         from sklearn.preprocessing import LabelEncoder
+        import lightgbm as lgb
 
         data_dir = str(tmp_path / "data")
         predictor = PlayerPredictor(profile_id="test_profile", data_dir=data_dir)
 
-        # Create a mock model and encoder
-        predictor.model = mock_ml_model
+        # Train a minimal real LightGBM model (pickle-compatible)
+        X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]])
+        y = np.array([0, 1, 2, 0])
+        train_data = lgb.Dataset(X, label=y)
+        params = {'objective': 'multiclass', 'num_class': 3, 'verbose': -1}
+        predictor.model = lgb.train(params, train_data, num_boost_round=2)
+
         predictor.label_encoder = LabelEncoder()
         predictor.label_encoder.fit(['Location1', 'Location2', 'Location3'])
 
@@ -339,7 +345,7 @@ class TestProfileUpdate:
         mock_pm = Mock()
         mock_pm.load_profile.return_value = mock_profile
 
-        with patch('ai.player_predictor.ProfileManager', return_value=mock_pm):
+        with patch('game.profile_manager.ProfileManager', return_value=mock_pm):
             predictor._update_profile_ai_memory()
 
             # Verify the update was attempted

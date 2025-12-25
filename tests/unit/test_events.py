@@ -325,29 +325,29 @@ class TestEventTypes:
         """Test Jackpot event doubles points."""
         jackpot = next(e for e in event_manager.event_pool if e.id == "jackpot")
 
-        assert jackpot.point_modifier(10) == 20
-        assert jackpot.point_modifier(25) == 50
+        assert jackpot.apply_point_modifier(10) == 20
+        assert jackpot.apply_point_modifier(25) == 50
 
     def test_clearance_adds_50_percent(self, event_manager):
         """Test Clearance Sale adds 50%."""
         clearance = next(e for e in event_manager.event_pool if e.id == "clearance_sale")
 
-        assert clearance.point_modifier(10) == 15
-        assert clearance.point_modifier(20) == 30
+        assert clearance.apply_point_modifier(10) == 15
+        assert clearance.apply_point_modifier(20) == 30
 
     def test_lockdown_reduces_30_percent(self, event_manager):
         """Test Security Lockdown reduces by 30%."""
         lockdown = next(e for e in event_manager.event_pool if e.id == "lockdown")
 
-        assert lockdown.point_modifier(10) == 7
-        assert lockdown.point_modifier(20) == 14
+        assert lockdown.apply_point_modifier(10) == 7
+        assert lockdown.apply_point_modifier(20) == 14
 
     def test_bonus_stash_adds_flat_20(self, event_manager):
         """Test Bonus Stash adds flat 20 points."""
         bonus = next(e for e in event_manager.event_pool if e.id == "bonus_stash")
 
-        assert bonus.point_modifier(10) == 30
-        assert bonus.point_modifier(0) == 20
+        assert bonus.apply_point_modifier(10) == 30
+        assert bonus.apply_point_modifier(0) == 20
 
     def test_immunity_special_effect(self, event_manager):
         """Test Immunity has immunity special effect."""

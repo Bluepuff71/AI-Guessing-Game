@@ -124,10 +124,9 @@ class TestPassiveManagement:
         ConfigLoader._instance = None
         PassiveShop.PASSIVES = None
 
-        from game import config_loader, passives as passives_module
+        from game import config_loader
         new_config = ConfigLoader()
         monkeypatch.setattr(config_loader, 'config', new_config)
-        monkeypatch.setattr(passives_module, 'config', new_config)
 
         player = Player(1, "Alice")
         passive = PassiveShop.get_passive(PassiveType.AI_WHISPERER)
@@ -150,10 +149,9 @@ class TestPassiveManagement:
         ConfigLoader._instance = None
         PassiveShop.PASSIVES = None
 
-        from game import config_loader, passives as passives_module
+        from game import config_loader
         new_config = ConfigLoader()
         monkeypatch.setattr(config_loader, 'config', new_config)
-        monkeypatch.setattr(passives_module, 'config', new_config)
 
         player = Player(1, "Alice")
         passive = PassiveShop.get_passive(PassiveType.AI_WHISPERER)
@@ -170,10 +168,9 @@ class TestPassiveManagement:
         ConfigLoader._instance = None
         PassiveShop.PASSIVES = None
 
-        from game import config_loader, passives as passives_module
+        from game import config_loader
         new_config = ConfigLoader()
         monkeypatch.setattr(config_loader, 'config', new_config)
-        monkeypatch.setattr(passives_module, 'config', new_config)
 
         player = Player(1, "Alice")
         player.points = 50
@@ -193,10 +190,9 @@ class TestPassiveManagement:
         ConfigLoader._instance = None
         PassiveShop.PASSIVES = None
 
-        from game import config_loader, passives as passives_module
+        from game import config_loader
         new_config = ConfigLoader()
         monkeypatch.setattr(config_loader, 'config', new_config)
-        monkeypatch.setattr(passives_module, 'config', new_config)
 
         player = Player(1, "Alice")
         player.points = 5  # Not enough for any passive
@@ -216,10 +212,9 @@ class TestPassiveManagement:
         ConfigLoader._instance = None
         PassiveShop.PASSIVES = None
 
-        from game import config_loader, passives as passives_module
+        from game import config_loader
         new_config = ConfigLoader()
         monkeypatch.setattr(config_loader, 'config', new_config)
-        monkeypatch.setattr(passives_module, 'config', new_config)
 
         player = Player(1, "Alice")
         player.points = 100

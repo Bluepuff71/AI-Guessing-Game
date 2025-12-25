@@ -245,7 +245,7 @@ def temp_events_config(temp_config_dir):
                 "description": "Double points at this location!",
                 "emoji": "💰",
                 "duration_rounds": 1,
-                "point_modifier": 2.0,
+                "point_modifier": {"type": "multiply", "value": 2.0},
                 "spawn_weight": 1.0
             },
             {
@@ -254,7 +254,7 @@ def temp_events_config(temp_config_dir):
                 "description": "+50% points at this location!",
                 "emoji": "🏷️",
                 "duration_rounds": 2,
-                "point_modifier": 1.5,
+                "point_modifier": {"type": "multiply", "value": 1.5},
                 "spawn_weight": 1.5
             },
             {
@@ -263,7 +263,7 @@ def temp_events_config(temp_config_dir):
                 "description": "-30% points, tighter security",
                 "emoji": "🔒",
                 "duration_rounds": 1,
-                "point_modifier": 0.7,
+                "point_modifier": {"type": "multiply", "value": 0.7},
                 "spawn_weight": 1.0
             },
             {
@@ -272,8 +272,7 @@ def temp_events_config(temp_config_dir):
                 "description": "+20 bonus points!",
                 "emoji": "🎁",
                 "duration_rounds": 1,
-                "point_modifier": 1.0,
-                "flat_bonus": 20,
+                "point_modifier": {"type": "add", "value": 20},
                 "spawn_weight": 0.8
             },
             {
@@ -282,7 +281,7 @@ def temp_events_config(temp_config_dir):
                 "description": "Cannot be caught here!",
                 "emoji": "🛡️",
                 "duration_rounds": 1,
-                "point_modifier": 1.0,
+                "point_modifier": {"type": "multiply", "value": 1.0},
                 "special_effect": "immunity",
                 "spawn_weight": 0.5
             }
