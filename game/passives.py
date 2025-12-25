@@ -82,6 +82,10 @@ class PassiveShop:
         """Get a passive by its display index (1-based)."""
         cls._load_passives()
         passives = list(cls.PASSIVES.values())
+        try:
+            index = int(index)
+        except (ValueError, TypeError):
+            return None
         if 1 <= index <= len(passives):
             return passives[index - 1]
         return None

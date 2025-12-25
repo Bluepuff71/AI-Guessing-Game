@@ -183,6 +183,25 @@ class TestPassiveShop:
         assert PassiveShop.get_passive_by_index(100) is None
         assert PassiveShop.get_passive_by_index(-1) is None
 
+    def test_get_passive_by_index_string_input(self, temp_config_dir, temp_passives_config, monkeypatch):
+        """Test getting passive by string index (questionary returns strings)."""
+        from game.config_loader import ConfigLoader
+        ConfigLoader._instance = None
+        new_config = ConfigLoader()
+
+        from game import config_loader
+        monkeypatch.setattr(config_loader, 'config', new_config)
+
+        PassiveShop.PASSIVES = None
+        # String "1" should work (questionary returns strings)
+        passive = PassiveShop.get_passive_by_index("1")
+        assert passive is not None
+        assert isinstance(passive, Passive)
+
+        # Invalid strings should return None
+        assert PassiveShop.get_passive_by_index("abc") is None
+        assert PassiveShop.get_passive_by_index("") is None
+
     def test_get_passive_count(self, temp_config_dir, temp_passives_config, monkeypatch):
         """Test getting count of available passives."""
         from game.config_loader import ConfigLoader
