@@ -9,28 +9,32 @@
         "name": "Behind Stockroom Boxes",
         "description": "Duck behind the stacked delivery boxes",
         "emoji": "📦",
-        "type": "hide"
+        "type": "hide",
+        "keep_amount": 0.85
       },
       {
         "id": "store_freezer",
         "name": "Walk-in Freezer",
         "description": "Hide in the cold storage unit",
         "emoji": "❄️",
-        "type": "hide"
+        "type": "hide",
+        "keep_amount": 0.9
       },
       {
         "id": "store_counter",
         "name": "Under Checkout Counter",
         "description": "Crouch beneath the checkout counter",
         "emoji": "🛒",
-        "type": "hide"
+        "type": "hide",
+        "keep_amount": 0.75
       },
       {
         "id": "store_backdoor",
         "name": "Back Alley Exit",
         "description": "Sprint out through the service door",
         "emoji": "🚪",
-        "type": "run"
+        "type": "run",
+        "keep_amount": 0.7
       }
     ],
     "Pawn Shop": [
@@ -99,28 +103,32 @@
         "name": "Between Slot Machines",
         "description": "Hide in the maze of slot machines",
         "emoji": "🎰",
-        "type": "hide"
+        "type": "hide",
+        "keep_amount": 0.75
       },
       {
         "id": "casino_vault",
         "name": "Main Money Vault",
         "description": "Lock yourself in the fortified vault",
         "emoji": "🏦",
-        "type": "hide"
+        "type": "hide",
+        "keep_amount": 0.95
       },
       {
         "id": "casino_security",
         "name": "Security Control Room",
         "description": "Hide in the camera monitoring room",
         "emoji": "📹",
-        "type": "hide"
+        "type": "hide",
+        "keep_amount": 0.85
       },
       {
         "id": "casino_floor",
         "name": "Crowded Casino Floor",
         "description": "Blend into the gambling crowd",
         "emoji": "🎲",
-        "type": "run"
+        "type": "run",
+        "keep_amount": 0.65
       }
     ],
     "Bank Heist": [

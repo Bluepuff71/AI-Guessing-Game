@@ -224,3 +224,99 @@ class TestDefaultType:
         for spot in spots:
             opt_type = spot.get('type', 'hide')
             assert opt_type == 'hide'
+
+
+class TestOptionKeepAmount:
+    """Tests for per-option keep_amount functionality."""
+
+    def test_get_option_keep_amount_explicit(self, sample_hiding_manager):
+        """Test getting keep_amount when explicitly set on option."""
+        option = {
+            'id': 'test_option',
+            'name': 'Test',
+            'type': 'hide',
+            'keep_amount': 0.9
+        }
+        assert sample_hiding_manager.get_option_keep_amount(option) == 0.9
+
+    def test_get_option_keep_amount_fallback(self, sample_hiding_manager):
+        """Test fallback to global retention when keep_amount not set."""
+        option = {
+            'id': 'test_option',
+            'name': 'Test',
+            'type': 'hide'
+        }
+        assert sample_hiding_manager.get_option_keep_amount(option) == 0.8
+
+    def test_get_option_keep_amount_zero(self, sample_hiding_manager):
+        """Test keep_amount of zero is respected."""
+        option = {
+            'id': 'test_option',
+            'name': 'Test',
+            'type': 'hide',
+            'keep_amount': 0.0
+        }
+        assert sample_hiding_manager.get_option_keep_amount(option) == 0.0
+
+    def test_get_option_keep_amount_full(self, sample_hiding_manager):
+        """Test keep_amount of 1.0 (100%) is respected."""
+        option = {
+            'id': 'test_option',
+            'name': 'Test',
+            'type': 'run',
+            'keep_amount': 1.0
+        }
+        assert sample_hiding_manager.get_option_keep_amount(option) == 1.0
+
+    def test_resolve_escape_with_custom_keep_amount(self, sample_hiding_manager):
+        """Test escape resolution uses option-specific keep_amount."""
+        player_choice = {
+            'id': 'custom_spot',
+            'name': 'Custom Spot',
+            'type': 'hide',
+            'keep_amount': 0.9
+        }
+        ai_prediction = 'other_spot'
+        location_points = 100
+
+        result = sample_hiding_manager.resolve_escape_attempt(
+            player_choice, ai_prediction, location_points
+        )
+
+        assert result['escaped'] is True
+        assert result['points_awarded'] == 90  # 90% of 100
+
+    def test_resolve_escape_with_low_keep_amount(self, sample_hiding_manager):
+        """Test escape with lower keep_amount gives fewer points."""
+        player_choice = {
+            'id': 'risky_spot',
+            'name': 'Risky Spot',
+            'type': 'run',
+            'keep_amount': 0.6
+        }
+        ai_prediction = 'other_spot'
+        location_points = 100
+
+        result = sample_hiding_manager.resolve_escape_attempt(
+            player_choice, ai_prediction, location_points
+        )
+
+        assert result['escaped'] is True
+        assert result['points_awarded'] == 60  # 60% of 100
+
+    def test_resolve_escape_default_keep_amount(self, sample_hiding_manager):
+        """Test escape resolution falls back to default when no keep_amount."""
+        player_choice = {
+            'id': 'default_spot',
+            'name': 'Default Spot',
+            'type': 'hide'
+        }
+        ai_prediction = 'other_spot'
+        location_points = 100
+
+        result = sample_hiding_manager.resolve_escape_attempt(
+            player_choice, ai_prediction, location_points
+        )
+
+        assert result['escaped'] is True
+        assert result['points_awarded'] == 80  # 80% default

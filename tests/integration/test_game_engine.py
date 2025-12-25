@@ -113,7 +113,7 @@ class TestChooseLocationPhase:
 
         # Mock select_location to choose location index 0
         import game.ui
-        monkeypatch.setattr(game.ui, 'select_location', lambda lm, scout_rolls=None, point_hints=None: 0)
+        monkeypatch.setattr(game.ui, 'select_location', lambda lm, **kwargs: 0)
 
         location = game_engine.choose_location_phase(player)
 
@@ -513,7 +513,7 @@ class TestHideOrRun:
         first_option = escape_options[0]
 
         # Mock UI to select first escape option
-        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts: first_option)
+        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts, **kwargs: first_option)
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
 
         # Mock escape predictor to predict wrong option
@@ -552,7 +552,7 @@ class TestHideOrRun:
         first_option = escape_options[0]
 
         # Mock UI to select first option
-        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts: first_option)
+        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts, **kwargs: first_option)
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
 
         # Mock escape predictor to predict correctly
@@ -1389,7 +1389,7 @@ class TestHideOrRunEdgeCases:
         first_option = escape_options[0]
 
         # Mock UI to select first option
-        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts: first_option)
+        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts, **kwargs: first_option)
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
         monkeypatch.setattr(game.ui, 'print_escape_result', lambda p, r, opts=None: None)
 
@@ -1443,7 +1443,7 @@ class TestHideOrRunEdgeCases:
             run_option = escape_options[0]  # Fallback
 
         # Mock UI to select run option
-        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts: run_option)
+        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts, **kwargs: run_option)
         monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
         monkeypatch.setattr(game.ui, 'print_escape_result', lambda p, r, opts=None: None)
 

@@ -89,7 +89,7 @@ class HidingManager:
         # Calculate points based on outcome (hiding and running both retain points)
         points_awarded = 0
         if escaped:
-            retention = self.get_run_point_retention()
+            retention = self.get_option_keep_amount(player_choice)
             points_awarded = int(location_points * retention)
 
         return {
@@ -111,6 +111,18 @@ class HidingManager:
             Point retention ratio (default 0.8 = 80%)
         """
         return self.mechanics_config.get('run_point_retention', 0.8)
+
+    def get_option_keep_amount(self, option: Dict[str, Any]) -> float:
+        """
+        Get the point retention for a specific escape option.
+
+        Args:
+            option: The escape option dict
+
+        Returns:
+            Point retention ratio (0.0-1.0), defaults to global run_point_retention
+        """
+        return option.get('keep_amount', self.get_run_point_retention())
 
     def get_option_by_id(self, location_name: str, option_id: str) -> Dict[str, Any]:
         """

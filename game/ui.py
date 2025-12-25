@@ -46,7 +46,7 @@ def flush_input():
             pass
 
 
-def select_option(choices: List[Dict[str, Any]], prompt: str = "", pointer: str = ">") -> Any:
+def select_option(choices: List[Dict[str, Any]], prompt: str = "", pointer: str = ">", color: str = "green") -> Any:
     """
     Display an interactive selection menu with arrow-key navigation.
 
@@ -55,11 +55,23 @@ def select_option(choices: List[Dict[str, Any]], prompt: str = "", pointer: str 
                  Optional 'disabled' key to make an option unselectable (used as separator).
         prompt: Optional prompt text to display above choices
         pointer: Pointer character for highlighting (default: ">")
+        color: Color for highlighting the selected option (default: "green")
 
     Returns:
         The 'value' of the selected choice
     """
     flush_input()
+
+    # Create dynamic style based on player color
+    style = QStyle([
+        ('qmark', 'fg:cyan bold'),
+        ('question', 'bold'),
+        ('pointer', f'fg:{color} bold'),
+        ('highlighted', f'fg:{color} bold'),
+        ('selected', f'fg:{color}'),
+        ('separator', 'fg:cyan'),
+        ('instruction', 'fg:gray'),
+    ])
 
     # Build questionary choices
     q_choices = []
@@ -73,7 +85,7 @@ def select_option(choices: List[Dict[str, Any]], prompt: str = "", pointer: str 
     result = questionary.select(
         prompt,
         choices=q_choices,
-        style=SELECTION_STYLE,
+        style=style,
         pointer=pointer,
         instruction="(arrow keys to move, Enter to select)"
     ).ask()
@@ -97,12 +109,16 @@ def select_from_list(items: List[str], prompt: str = "", pointer: str = ">") -> 
     return select_option(choices, prompt, pointer)
 
 
-def select_location(location_manager: LocationManager, scout_rolls: dict = None, point_hints: dict = None) -> int:
+def select_location(location_manager: LocationManager, color: str = "green", event_manager=None,
+                    previous_ai_location=None, scout_rolls: dict = None, point_hints: dict = None) -> int:
     """
     Select a loot location using arrow keys.
 
     Args:
         location_manager: LocationManager with available locations
+        color: Color for highlighting the selection
+        event_manager: Optional EventManager to show active events
+        previous_ai_location: Optional Location where AI searched last round
         scout_rolls: Optional dict of location name -> scout preview points
         point_hints: Optional dict of location name -> hint string
 
@@ -112,8 +128,15 @@ def select_location(location_manager: LocationManager, scout_rolls: dict = None,
     locations = location_manager.get_all()
     choices = []
 
+    # Add previous AI location info as a separator if provided
+    if previous_ai_location:
+        choices.append({
+            'text': f"Last round AI searched: {previous_ai_location.emoji} {previous_ai_location.name}",
+            'disabled': True
+        })
+
     for i, loc in enumerate(locations):
-        # Build display text similar to print_locations
+        # Build display text
         if scout_rolls and loc.name in scout_rolls:
             scout_roll = scout_rolls[loc.name]
             text = f"{loc.emoji} {loc.name:<22} 📡 {scout_roll:>2} pts (Scout preview!)"
@@ -123,9 +146,15 @@ def select_location(location_manager: LocationManager, scout_rolls: dict = None,
         else:
             text = f"{loc.emoji} {loc.name:<22} {loc.get_range_str():>6} pts"
 
+        # Add event info inline if there's an active event
+        if event_manager:
+            event = event_manager.get_location_event(loc)
+            if event:
+                text += f"  {event.emoji} {event.name}"
+
         choices.append({'text': text, 'value': i})
 
-    return select_option(choices, "Choose your looting location:")
+    return select_option(choices, "Choose your looting location:", color=color)
 
 
 def select_passive(player: Player) -> Optional[int]:
@@ -765,7 +794,8 @@ def print_caught_message(player, location):
     console.print()
 
 
-def select_escape_option(escape_options: list, player, location_points: int) -> dict:
+def select_escape_option(escape_options: list, player, location_points: int,
+                         hiding_manager=None, passive_manager=None) -> dict:
     """
     Present all escape options and let player choose using arrow keys.
     This is the prediction-based escape system where player tries to outsmart the AI.
@@ -774,6 +804,8 @@ def select_escape_option(escape_options: list, player, location_points: int) -> 
         escape_options: List of escape option dicts with id, name, description, emoji, type
         player: Player who was caught
         location_points: Points rolled at this location
+        hiding_manager: Optional HidingManager for per-option retention calculation
+        passive_manager: Optional PassiveManager for Quick Feet check
 
     Returns:
         Selected escape option dict
@@ -786,22 +818,51 @@ def select_escape_option(escape_options: list, player, location_points: int) -> 
     hiding_spots = [opt for opt in escape_options if opt.get('type', 'hide') == 'hide']
     escape_routes = [opt for opt in escape_options if opt.get('type') == 'run']
 
-    # Calculate run points
-    retention_points = int(location_points * 0.8)
+    # Check for Quick Feet passive
+    has_quick_feet = False
+    quick_feet_bonus = 0.0
+    if passive_manager:
+        passive_retention = passive_manager.get_run_retention()
+        if passive_retention is not None:
+            has_quick_feet = True
+            quick_feet_bonus = passive_retention - 0.8  # 0.95 - 0.8 = 0.15
+
+    # Default retention
+    default_retention = 0.8
 
     # Build choices for arrow-key selection
     choices = []
 
     # Add hiding spots section header
-    choices.append({'text': f"── HIDING SPOTS (Keep {retention_points} pts) ──", 'disabled': True})
+    choices.append({'text': "── HIDING SPOTS ──", 'disabled': True})
     for spot in hiding_spots:
-        text = f"{spot['emoji']} {spot['name']} - {spot['description']}"
+        if hiding_manager:
+            retention = hiding_manager.get_option_keep_amount(spot)
+        else:
+            retention = spot.get('keep_amount', default_retention)
+        retention_pct = int(retention * 100)
+        retention_pts = int(location_points * retention)
+        text = f"{spot['emoji']} {spot['name']} ({retention_pct}% = {retention_pts} pts) - {spot['description']}"
         choices.append({'text': text, 'value': spot})
 
     # Add escape routes section header
-    choices.append({'text': f"── ESCAPE ROUTES (Keep {retention_points} pts) ──", 'disabled': True})
+    choices.append({'text': "── ESCAPE ROUTES ──", 'disabled': True})
     for route in escape_routes:
-        text = f"{route['emoji']} {route['name']} - {route['description']}"
+        if hiding_manager:
+            base_retention = hiding_manager.get_option_keep_amount(route)
+        else:
+            base_retention = route.get('keep_amount', default_retention)
+
+        # Apply Quick Feet bonus for running options
+        if has_quick_feet:
+            final_retention = min(base_retention + quick_feet_bonus, 1.0)
+            retention_pct = int(final_retention * 100)
+            retention_pts = int(location_points * final_retention)
+            text = f"{route['emoji']} {route['name']} ({retention_pct}% = {retention_pts} pts, +Quick Feet) - {route['description']}"
+        else:
+            retention_pct = int(base_retention * 100)
+            retention_pts = int(location_points * base_retention)
+            text = f"{route['emoji']} {route['name']} ({retention_pct}% = {retention_pts} pts) - {route['description']}"
         choices.append({'text': text, 'value': route})
 
     # Use arrow-key selection

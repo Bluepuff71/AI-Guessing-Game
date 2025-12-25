@@ -128,10 +128,6 @@ class GameEngine:
             # Show current standings WITH choices made so far
             ui.print_standings(self.players, player_choices)
 
-            # Show locations with point hints if player has Inside Knowledge
-            point_hints = self._generate_point_hints(player)
-            ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, point_hints=point_hints)
-
             # Shop phase
             self.shop_phase(player)
 
@@ -200,11 +196,6 @@ class GameEngine:
                 ui.console.input("\n[dim]Press Enter to continue shopping...[/dim]")
                 ui.clear()
                 ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
-
-                # Show locations with point hints if player has Inside Knowledge
-                point_hints = self._generate_point_hints(player)
-                ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, point_hints=point_hints)
-
                 ui.console.print()
                 # Continue loop to allow more purchases
             else:
@@ -212,8 +203,6 @@ class GameEngine:
                 ui.console.input("\n[dim]Press Enter to continue...[/dim]")
                 ui.clear()
                 ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
-                point_hints = self._generate_point_hints(player)
-                ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, point_hints=point_hints)
                 ui.console.print()
                 # Continue loop, don't exit
 
@@ -303,7 +292,13 @@ class GameEngine:
         point_hints = self._generate_point_hints(player)
 
         # Use arrow-key selection for location choice
-        location_index = ui.select_location(self.location_manager, point_hints=point_hints)
+        location_index = ui.select_location(
+            self.location_manager,
+            color=player.color,
+            event_manager=self.event_manager,
+            previous_ai_location=self.last_ai_search_location,
+            point_hints=point_hints
+        )
         location = self.location_manager.get_location(location_index)
 
         ui.console.print(f"[green]You chose: {location.emoji} {location.name} ({location.get_range_str()} pts)[/green]")
@@ -681,7 +676,11 @@ class GameEngine:
         )
 
         # Player selects their escape option
-        chosen_option = ui.select_escape_option(escape_options, player, location_points)
+        chosen_option = ui.select_escape_option(
+            escape_options, player, location_points,
+            hiding_manager=self.hiding_manager,
+            passive_manager=player.passive_manager
+        )
 
         # Resolve the prediction - did player outsmart the AI?
         result = self.hiding_manager.resolve_escape_attempt(
@@ -706,17 +705,24 @@ class GameEngine:
                     result['passive_saved'] = True
                     ui.console.print(f"\n[bold green]🎭 PASSIVE SAVE![/bold green] Your passive ability helped you escape!")
 
-                    # Calculate points for successful run with Quick Feet override
+                    # Calculate points for successful escape
+                    base_retention = self.hiding_manager.get_option_keep_amount(chosen_option)
                     if choice_type == 'run':
-                        retention = player.passive_manager.get_run_retention()
-                        if retention is None:
-                            retention = self.hiding_manager.get_run_point_retention()
-                        result['points_awarded'] = int(location_points * retention)
+                        # Apply Quick Feet bonus additively (capped at 1.0)
+                        passive_retention = player.passive_manager.get_run_retention()
+                        if passive_retention is not None:
+                            quick_feet_bonus = passive_retention - 0.8  # 0.95 - 0.8 = 0.15
+                            base_retention = min(base_retention + quick_feet_bonus, 1.0)
+                    result['points_awarded'] = int(location_points * base_retention)
 
         # Also apply Quick Feet retention bonus for successful runs (even without second chance)
         if result['escaped'] and choice_type == 'run' and not result.get('passive_saved'):
-            retention = player.passive_manager.get_run_retention()
-            if retention is not None:
+            passive_retention = player.passive_manager.get_run_retention()
+            if passive_retention is not None:
+                # Apply Quick Feet bonus additively (capped at 1.0)
+                base_retention = self.hiding_manager.get_option_keep_amount(chosen_option)
+                quick_feet_bonus = passive_retention - 0.8  # 0.95 - 0.8 = 0.15
+                retention = min(base_retention + quick_feet_bonus, 1.0)
                 result['points_awarded'] = int(location_points * retention)
 
         # Add AI reasoning for display
