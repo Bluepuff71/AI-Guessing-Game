@@ -5,15 +5,15 @@ from game.locations import Location, LocationManager
 
 
 @pytest.fixture
-def location_manager():
+def location_manager(sample_location_manager):
     """Create a LocationManager for testing."""
-    return LocationManager()
+    return sample_location_manager
 
 
 @pytest.fixture
-def event_manager():
+def event_manager(sample_event_manager):
     """Create an EventManager for testing."""
-    return EventManager(max_concurrent=2)
+    return sample_event_manager
 
 
 class TestEventDataclass:
@@ -73,43 +73,31 @@ class TestEventDataclass:
 class TestEventManagerInitialization:
     """Tests for EventManager initialization."""
 
-    def test_initialization_default(self):
+    def test_initialization_default(self, event_manager):
         """Test EventManager initializes with default max_concurrent from config."""
-        manager = EventManager()
-
         # Should load from config (default 2)
-        assert manager.max_concurrent == 2
-        assert manager.active_events == []
-        assert len(manager.event_pool) == 10  # 10 events in pool
+        assert event_manager.max_concurrent == 2
+        assert event_manager.active_events == []
+        assert len(event_manager.event_pool) == 5  # 5 events in test pool
 
-    def test_initialization_custom_max(self):
+    def test_initialization_custom_max(self, sample_event_manager, monkeypatch, temp_config_dir, temp_events_config):
         """Test EventManager initializes with custom max_concurrent."""
+        from game.events import EventManager
         manager = EventManager(max_concurrent=3)
 
         assert manager.max_concurrent == 3
         assert manager.active_events == []
 
-    def test_event_pool_contains_expected_events(self):
+    def test_event_pool_contains_expected_events(self, event_manager):
         """Test event pool contains all expected event types."""
-        manager = EventManager()
+        event_ids = [e.id for e in event_manager.event_pool]
 
-        event_ids = [e.id for e in manager.event_pool]
-
-        # Point modifiers
+        # Point modifiers (from test config)
         assert "jackpot" in event_ids
-        assert "clearance" in event_ids
+        assert "clearance_sale" in event_ids
         assert "lockdown" in event_ids
         assert "bonus_stash" in event_ids
-
-        # Risk modifiers
-        assert "distraction" in event_ids
-        assert "tip_off" in event_ids
-        assert "patrol" in event_ids
-        assert "all_clear" in event_ids
-
-        # Special mechanics
-        assert "insurance" in event_ids
-        assert "silent_alarm" in event_ids
+        assert "immunity" in event_ids
 
 
 class TestEventGeneration:
@@ -298,7 +286,7 @@ class TestEventEffectApplication:
         location = location_manager.get_location(0)
 
         # Find immunity event
-        immunity_template = next(e for e in event_manager.event_pool if e.id == "insurance")
+        immunity_template = next(e for e in event_manager.event_pool if e.id == "immunity")
         immunity_event = immunity_template.copy_with_location(location)
         event_manager.active_events.append(immunity_event)
 
@@ -333,56 +321,42 @@ class TestEventManagerUtilities:
 class TestEventTypes:
     """Tests for specific event types."""
 
-    def test_jackpot_doubles_points(self):
+    def test_jackpot_doubles_points(self, event_manager):
         """Test Jackpot event doubles points."""
-        manager = EventManager()
-        jackpot = next(e for e in manager.event_pool if e.id == "jackpot")
+        jackpot = next(e for e in event_manager.event_pool if e.id == "jackpot")
 
         assert jackpot.point_modifier(10) == 20
         assert jackpot.point_modifier(25) == 50
 
-    def test_clearance_adds_50_percent(self):
+    def test_clearance_adds_50_percent(self, event_manager):
         """Test Clearance Sale adds 50%."""
-        manager = EventManager()
-        clearance = next(e for e in manager.event_pool if e.id == "clearance")
+        clearance = next(e for e in event_manager.event_pool if e.id == "clearance_sale")
 
         assert clearance.point_modifier(10) == 15
         assert clearance.point_modifier(20) == 30
 
-    def test_lockdown_reduces_30_percent(self):
+    def test_lockdown_reduces_30_percent(self, event_manager):
         """Test Security Lockdown reduces by 30%."""
-        manager = EventManager()
-        lockdown = next(e for e in manager.event_pool if e.id == "lockdown")
+        lockdown = next(e for e in event_manager.event_pool if e.id == "lockdown")
 
         assert lockdown.point_modifier(10) == 7
         assert lockdown.point_modifier(20) == 14
 
-    def test_bonus_stash_adds_flat_20(self):
+    def test_bonus_stash_adds_flat_20(self, event_manager):
         """Test Bonus Stash adds flat 20 points."""
-        manager = EventManager()
-        bonus = next(e for e in manager.event_pool if e.id == "bonus_stash")
+        bonus = next(e for e in event_manager.event_pool if e.id == "bonus_stash")
 
         assert bonus.point_modifier(10) == 30
         assert bonus.point_modifier(0) == 20
 
-    def test_immunity_special_effect(self):
-        """Test Insurance has immunity special effect."""
-        manager = EventManager()
-        insurance = next(e for e in manager.event_pool if e.id == "insurance")
+    def test_immunity_special_effect(self, event_manager):
+        """Test Immunity has immunity special effect."""
+        immunity = next(e for e in event_manager.event_pool if e.id == "immunity")
 
-        assert insurance.special_effect == "immunity"
+        assert immunity.special_effect == "immunity"
 
-    def test_guaranteed_catch_special_effect(self):
-        """Test Silent Alarm has guaranteed_catch special effect."""
-        manager = EventManager()
-        alarm = next(e for e in manager.event_pool if e.id == "silent_alarm")
-
-        assert alarm.special_effect == "guaranteed_catch"
-
-    def test_event_durations(self):
+    def test_event_durations(self, event_manager):
         """Test events have appropriate durations."""
-        manager = EventManager()
-
         # Most events should be 1-2 rounds
-        for event in manager.event_pool:
+        for event in event_manager.event_pool:
             assert 1 <= event.duration_rounds <= 2

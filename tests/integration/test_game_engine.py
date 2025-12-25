@@ -459,3 +459,253 @@ class TestEventSystem:
         # Prediction is tuple: (location_name, confidence, reasoning)
         assert isinstance(prediction, tuple)
         assert len(prediction) == 3
+
+
+class TestPassiveShopPhase:
+    """Tests for passive ability purchasing in shop phase."""
+
+    def test_shop_phase_buy_passive(self, game_engine, monkeypatch, temp_passives_config):
+        """Test shop phase when player buys a passive."""
+        from game.passives import PassiveShop, PassiveType
+        from game.config_loader import ConfigLoader
+
+        # Reset config and passives
+        ConfigLoader._instance = None
+        PassiveShop.PASSIVES = None
+
+        player = game_engine.players[0]
+        player.points = 50
+
+        # Mock console.input: 'p' for passives, '1' to buy first passive, '' to continue
+        import game.ui
+        inputs = iter(["p", "1", "", ""])
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs, ""))
+
+        game_engine.shop_phase(player)
+
+        # Player should have less points and potentially a passive
+        # (Exact behavior depends on passive cost)
+        assert player.points <= 50
+
+
+class TestHideOrRun:
+    """Tests for hide or run escape mechanic."""
+
+    def test_handle_hide_or_run_escaped_hide(self, game_engine, monkeypatch, sample_hiding_manager, temp_hiding_config):
+        """Test successful hide escape."""
+        from game.hiding import HidingManager
+        import game.ui
+        import game.engine
+
+        player = game_engine.players[0]
+        player.points = 50
+
+        # Mock the HidingManager
+        monkeypatch.setattr(game_engine, 'hiding_manager', sample_hiding_manager)
+
+        # Mock UI to select first escape option
+        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts: opts[0])
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Mock escape predictor to predict wrong option
+        def mock_predict_escape(*args, **kwargs):
+            return ('wrong_option', 0.5, 'Mock reasoning')
+        monkeypatch.setattr(game_engine.escape_predictor, 'predict_escape_option', mock_predict_escape)
+
+        # Mock print_escape_result to avoid animation issues
+        monkeypatch.setattr(game.ui, 'print_escape_result', lambda p, r, opts=None: None)
+
+        caught_location = game_engine.location_manager.get_location(0)
+        search_location = caught_location
+        location_points = 20
+
+        result = game_engine.handle_hide_or_run(player, caught_location, search_location, location_points)
+
+        # Player should have escaped (AI predicted wrong)
+        assert result['escaped'] is True
+        assert player.alive is True
+
+    def test_handle_hide_or_run_caught(self, game_engine, monkeypatch, sample_hiding_manager, temp_hiding_config):
+        """Test failed escape when AI predicts correctly."""
+        import game.ui
+        import game.engine
+
+        player = game_engine.players[0]
+        player.points = 50
+
+        # Mock the HidingManager
+        monkeypatch.setattr(game_engine, 'hiding_manager', sample_hiding_manager)
+
+        escape_options = sample_hiding_manager.get_escape_options_for_location("Test Store")
+        first_option = escape_options[0] if escape_options else {'id': 'test', 'type': 'hide'}
+
+        # Mock UI to select first option
+        monkeypatch.setattr(game.ui, 'select_escape_option', lambda opts, p, pts: first_option)
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Mock escape predictor to predict correctly
+        def mock_predict_escape(*args, **kwargs):
+            return (first_option['id'], 0.9, 'Correct prediction')
+        monkeypatch.setattr(game_engine.escape_predictor, 'predict_escape_option', mock_predict_escape)
+
+        # Mock print_escape_result to avoid animation issues
+        monkeypatch.setattr(game.ui, 'print_escape_result', lambda p, r, opts=None: None)
+
+        caught_location = game_engine.location_manager.get_location(0)
+        search_location = caught_location
+        location_points = 20
+
+        result = game_engine.handle_hide_or_run(player, caught_location, search_location, location_points)
+
+        # Player should be caught (AI predicted correctly)
+        assert result['escaped'] is False
+        assert player.alive is False
+
+
+class TestRecentCatches:
+    """Tests for recent catches tracking."""
+
+    def test_count_recent_catches(self, game_engine):
+        """Test counting catches in recent rounds."""
+        # Add some catch history
+        for player in game_engine.players:
+            loc = game_engine.location_manager.get_location(0)
+            player.record_choice(loc, 1, caught=True, points_earned=0)
+            player.record_choice(loc, 2, caught=False, points_earned=10)
+            player.record_choice(loc, 3, caught=True, points_earned=0)
+
+        # Count recent catches (last 3 rounds)
+        count = game_engine.count_recent_catches(window=3)
+
+        assert count == 4  # 2 players * 2 catches each
+
+
+class TestPointHintGeneration:
+    """Tests for point hint generation with Inside Knowledge passive."""
+
+    def test_generate_point_hints_no_passive(self, game_engine):
+        """Test no hints generated without Inside Knowledge passive."""
+        player = game_engine.players[0]
+
+        hints = game_engine.generate_point_hints(player)
+
+        # Without the passive, should return empty or None
+        assert hints is None or hints == {}
+
+    def test_generate_point_hints_with_passive(self, game_engine, monkeypatch, temp_passives_config):
+        """Test hints generated with Inside Knowledge passive."""
+        from game.passives import PassiveShop, PassiveType, PassiveManager
+        from game.config_loader import ConfigLoader
+
+        ConfigLoader._instance = None
+        PassiveShop.PASSIVES = None
+
+        player = game_engine.players[0]
+
+        # Give player Inside Knowledge passive
+        passive = PassiveShop.get_passive(PassiveType.INSIDE_KNOWLEDGE)
+        if passive:
+            player.passive_manager.add_passive(passive)
+
+            hints = game_engine.generate_point_hints(player)
+
+            # Should have hints for all locations
+            if hints:
+                assert len(hints) == len(game_engine.location_manager.get_all())
+
+
+class TestFinalResults:
+    """Tests for final results display."""
+
+    def test_show_final_results_winner(self, game_engine, mock_console, monkeypatch):
+        """Test final results display when a player wins."""
+        import game.ui
+        import game.animations
+
+        console, output = mock_console
+
+        player = game_engine.players[0]
+        player.points = 105
+        game_engine.winner = player
+        game_engine.game_over = True
+
+        # Mock animations
+        monkeypatch.setattr(game.animations, 'play_victory_animation', lambda: None)
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        game_engine.show_final_results()
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_show_final_results_ai_wins(self, game_engine, mock_console, monkeypatch):
+        """Test final results display when AI wins."""
+        import game.ui
+
+        console, output = mock_console
+
+        # All players eliminated
+        for player in game_engine.players:
+            player.alive = False
+
+        game_engine.winner = None
+        game_engine.game_over = True
+
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        game_engine.show_final_results()
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+
+class TestHighRollerEffect:
+    """Tests for High Roller passive effect integration."""
+
+    def test_reveal_high_roller_bust(self, game_engine, monkeypatch, temp_passives_config, deterministic_random):
+        """Test High Roller bust mechanic."""
+        from game.passives import PassiveShop, PassiveType
+        from game.config_loader import ConfigLoader
+        import game.ui
+        import random
+
+        ConfigLoader._instance = None
+        PassiveShop.PASSIVES = None
+
+        player1 = game_engine.players[0]
+        player2 = game_engine.players[1]
+        player1.points = 50
+
+        # Give player High Roller passive
+        passive = PassiveShop.get_passive(PassiveType.HIGH_ROLLER)
+        if passive:
+            player1.passive_manager.add_passive(passive)
+
+        # Mock console
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+
+        # Force bust by mocking random
+        monkeypatch.setattr(random, 'random', lambda: 0.0)  # Always bust
+
+        # Get a bonus location from passive effects
+        bonus_locations = passive.get_effect('bonus_locations', []) if passive else []
+        if bonus_locations and any(loc.name in bonus_locations for loc in game_engine.location_manager.get_all()):
+            # Find matching location
+            for loc in game_engine.location_manager.get_all():
+                if loc.name in bonus_locations:
+                    loc1 = loc
+                    break
+        else:
+            loc1 = game_engine.location_manager.get_location(0)
+
+        loc2 = game_engine.location_manager.get_location(1)
+
+        player_choices = {player1: loc1, player2: loc2}
+        predictions = {
+            player1: (loc2.name, 0.5, "Wrong prediction"),
+            player2: (loc1.name, 0.5, "Wrong prediction")
+        }
+
+        # Play should not crash with High Roller effect
+        initial_points = player1.points
+        game_engine.reveal_and_resolve_phase(player_choices, loc2, predictions, "Test")

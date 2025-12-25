@@ -12,8 +12,8 @@ class TestItemType:
         assert ItemType.SCOUT.value == "scout"
 
     def test_item_type_enum_count(self):
-        """Test ItemType has exactly 3 items."""
-        assert len(list(ItemType)) == 3
+        """Test ItemType has exactly 2 items."""
+        assert len(list(ItemType)) == 2
 
 
 class TestItem:
@@ -75,7 +75,7 @@ class TestItemShop:
         ItemShop._load_items()
 
         assert ItemShop.ITEMS is not None
-        assert len(ItemShop.ITEMS) == 3
+        assert len(ItemShop.ITEMS) == 2
 
     def test_get_item_fresh_copy(self, temp_config_dir):
         """Test get_item returns fresh independent copies."""
@@ -102,12 +102,12 @@ class TestItemShop:
         assert scout.type == ItemType.SCOUT
 
     def test_get_all_items(self, temp_config_dir):
-        """Test get_all_items returns all 3 items."""
+        """Test get_all_items returns all 2 items."""
         ItemShop.ITEMS = None
 
         items = ItemShop.get_all_items()
 
-        assert len(items) == 3
+        assert len(items) == 2
         assert all(isinstance(item, Item) for item in items)
 
     def test_item_shop_singleton_behavior(self, temp_config_dir):

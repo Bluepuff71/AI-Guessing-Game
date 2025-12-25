@@ -182,3 +182,448 @@ class TestInputHandling:
         result = get_player_input("Choose:", valid_range=range(1, 4))
 
         assert result == "1"
+
+
+class TestFlushInput:
+    """Tests for flush_input function."""
+
+    def test_flush_input_windows(self, monkeypatch):
+        """Test flush_input on Windows platform."""
+        from game import ui
+        monkeypatch.setattr('sys.platform', 'win32')
+
+        # Should not raise even if msvcrt is not available
+        ui.flush_input()
+
+    def test_flush_input_unix(self, monkeypatch):
+        """Test flush_input on Unix platform."""
+        from game import ui
+        monkeypatch.setattr('sys.platform', 'linux')
+
+        # Should not raise even if termios is not available
+        ui.flush_input()
+
+
+class TestPassiveShopDisplay:
+    """Tests for passive shop display."""
+
+    def test_print_passive_shop(self, mock_console, temp_config_dir, temp_passives_config, monkeypatch):
+        """Test print_passive_shop displays available passives."""
+        from game.ui import print_passive_shop
+        from game.config_loader import ConfigLoader
+        from game.passives import PassiveShop
+
+        ConfigLoader._instance = None
+        new_config = ConfigLoader()
+
+        from game import config_loader, passives as passives_module
+        monkeypatch.setattr(config_loader, 'config', new_config)
+        monkeypatch.setattr(passives_module, 'config', new_config)
+
+        PassiveShop.PASSIVES = None
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+        player.points = 50
+
+        print_passive_shop(player)
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_print_passive_shop_with_owned_passives(self, mock_console, temp_config_dir, temp_passives_config, monkeypatch):
+        """Test print_passive_shop shows owned passives differently."""
+        from game.ui import print_passive_shop
+        from game.config_loader import ConfigLoader
+        from game.passives import PassiveShop, PassiveType
+
+        ConfigLoader._instance = None
+        new_config = ConfigLoader()
+
+        from game import config_loader, passives as passives_module
+        monkeypatch.setattr(config_loader, 'config', new_config)
+        monkeypatch.setattr(passives_module, 'config', new_config)
+
+        PassiveShop.PASSIVES = None
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+        player.points = 50
+
+        # Give player an owned passive
+        passive = PassiveShop.get_passive(PassiveType.AI_WHISPERER)
+        if passive:
+            player.passive_manager.add_passive(passive)
+
+        print_passive_shop(player)
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+
+class TestIntelReport:
+    """Tests for intel report display."""
+
+    def test_show_intel_report_simple(self, mock_console, temp_config_dir):
+        """Test show_intel_report in simple mode."""
+        from game.ui import show_intel_report
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+        player.points = 50
+
+        show_intel_report(
+            player,
+            threat_level=0.6,
+            predictability=0.4,
+            insights=["You tend to revisit locations"],
+            detail_level="simple"
+        )
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_show_intel_report_full(self, mock_console, temp_config_dir):
+        """Test show_intel_report in full mode."""
+        from game.ui import show_intel_report
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+        player.points = 50
+
+        show_intel_report(
+            player,
+            threat_level=0.8,
+            predictability=0.7,
+            insights=["High threat", "Very predictable"],
+            detail_level="full"
+        )
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_show_intel_report_with_ai_memory(self, mock_console, temp_config_dir):
+        """Test show_intel_report with AI memory data."""
+        from game.ui import show_intel_report
+        from unittest.mock import Mock
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+
+        ai_memory = Mock()
+        ai_memory.games_played = 5
+        ai_memory.has_personal_model = True
+        ai_memory.model_trained_date = "2024-01-15"
+
+        show_intel_report(
+            player,
+            threat_level=0.5,
+            predictability=0.5,
+            insights=[],
+            ai_memory=ai_memory,
+            detail_level="full"
+        )
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+
+class TestRevealPhase:
+    """Tests for reveal phase UI functions."""
+
+    def test_print_reveal_header(self, mock_console):
+        """Test print_reveal_header outputs header."""
+        from game.ui import print_reveal_header
+
+        console, output = mock_console
+        print_reveal_header()
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_print_player_choice(self, mock_console, temp_config_dir):
+        """Test print_player_choice displays player's choice."""
+        from game.ui import print_player_choice
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+        loc = Location("Test Store", "🏪", 5, 10)
+
+        print_player_choice(player, loc, "Other Location", is_match=False)
+
+        result = output.getvalue()
+        assert "Alice" in result
+
+    def test_print_player_choice_match(self, mock_console, temp_config_dir):
+        """Test print_player_choice when AI predicted correctly."""
+        from game.ui import print_player_choice
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+        loc = Location("Test Store", "🏪", 5, 10)
+
+        print_player_choice(player, loc, "Test Store", is_match=True)
+
+        result = output.getvalue()
+        assert "Alice" in result
+
+    def test_print_search_result(self, mock_console, temp_config_dir):
+        """Test print_search_result displays search info."""
+        from game.ui import print_search_result
+
+        console, output = mock_console
+        loc = Location("Test Store", "🏪", 5, 10)
+
+        print_search_result(loc)
+
+        result = output.getvalue()
+        assert "Test Store" in result
+
+    def test_print_search_result_with_previous(self, mock_console, temp_config_dir):
+        """Test print_search_result with previous location."""
+        from game.ui import print_search_result
+
+        console, output = mock_console
+        loc = Location("Test Store", "🏪", 5, 10)
+        prev_loc = Location("Old Store", "🏬", 3, 8)
+
+        print_search_result(loc, previous_location=prev_loc, reasoning="Pattern detected")
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+
+class TestProfileUI:
+    """Tests for profile selection UI."""
+
+    def test_print_profile_selection_menu_empty(self, mock_console):
+        """Test profile menu with no profiles."""
+        from game.ui import print_profile_selection_menu
+
+        console, output = mock_console
+        print_profile_selection_menu([])
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_print_profile_selection_menu_with_profiles(self, mock_console):
+        """Test profile menu with existing profiles."""
+        from game.ui import print_profile_selection_menu
+        from unittest.mock import Mock
+
+        console, output = mock_console
+
+        profile1 = Mock()
+        profile1.name = "Player1"
+        profile1.id = "p1"
+        profile1.stats = Mock()
+        profile1.stats.games_played = 10
+        profile1.stats.wins = 5
+
+        profiles = [profile1]
+        print_profile_selection_menu(profiles)
+
+        result = output.getvalue()
+        assert "Player1" in result
+
+    def test_get_profile_selection(self, mock_console, monkeypatch):
+        """Test get_profile_selection returns valid input."""
+        from game.ui import get_profile_selection
+
+        console, output = mock_console
+        monkeypatch.setattr('builtins.input', lambda: "1")
+
+        result = get_profile_selection(max_number=5)
+
+        assert result == "1"
+
+    def test_print_current_profile(self, mock_console):
+        """Test print_current_profile displays profile info."""
+        from game.ui import print_current_profile
+        from unittest.mock import Mock
+
+        console, output = mock_console
+
+        profile = Mock()
+        profile.name = "TestPlayer"
+        profile.id = "test123"
+
+        print_current_profile(profile)
+
+        result = output.getvalue()
+        assert "TestPlayer" in result
+
+
+class TestHidingUI:
+    """Tests for hiding/escape UI functions."""
+
+    def test_print_caught_message(self, mock_console, temp_config_dir):
+        """Test print_caught_message displays caught info."""
+        from game.ui import print_caught_message
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+        loc = Location("Test Store", "🏪", 5, 10)
+
+        print_caught_message(player, loc)
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_select_escape_option(self, mock_console, monkeypatch, temp_config_dir):
+        """Test select_escape_option returns selected option."""
+        from game.ui import select_escape_option
+
+        console, output = mock_console
+        # Mock input to select first option
+        monkeypatch.setattr('builtins.input', lambda: "1")
+
+        escape_options = [
+            {'id': 'hide1', 'name': 'Hide Spot 1', 'description': 'A hiding spot', 'emoji': '📦', 'type': 'hide'},
+            {'id': 'run1', 'name': 'Run Route 1', 'description': 'An escape route', 'emoji': '🚪', 'type': 'run'}
+        ]
+
+        player = Player(1, "Alice")
+        result = select_escape_option(escape_options, player, location_points=20)
+
+        assert result['id'] == 'hide1'
+
+    def test_print_escape_result_success(self, mock_console, temp_config_dir, monkeypatch):
+        """Test print_escape_result for successful escape."""
+        from game.ui import print_escape_result
+        import game.animations as animations
+
+        # Mock animations to avoid actual display
+        monkeypatch.setattr(animations, 'play_escape_animation', lambda: None)
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+
+        result = {
+            'escaped': True,
+            'points_awarded': 16,
+            'player_choice_id': 'hide1',
+            'player_choice_name': 'Hide Spot',
+            'ai_prediction_id': 'hide2',
+            'choice_type': 'hide',
+            'ai_was_correct': False
+        }
+
+        print_escape_result(player, result)
+
+        output_text = output.getvalue()
+        assert len(output_text) > 0
+
+    def test_print_escape_result_failure(self, mock_console, temp_config_dir, monkeypatch):
+        """Test print_escape_result for failed escape."""
+        from game.ui import print_escape_result
+        import game.animations as animations
+
+        monkeypatch.setattr(animations, 'play_elimination_animation', lambda: None)
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+
+        result = {
+            'escaped': False,
+            'points_awarded': 0,
+            'player_choice_id': 'hide1',
+            'player_choice_name': 'Hide Spot',
+            'ai_prediction_id': 'hide1',
+            'choice_type': 'hide',
+            'ai_was_correct': True
+        }
+
+        print_escape_result(player, result)
+
+        output_text = output.getvalue()
+        assert len(output_text) > 0
+
+
+class TestPostGameReport:
+    """Tests for post-game report display."""
+
+    def test_print_post_game_report(self, mock_console, temp_config_dir):
+        """Test print_post_game_report displays summary."""
+        from game.ui import print_post_game_report
+
+        console, output = mock_console
+        player = Player(1, "Alice")
+        player.points = 105
+
+        insights = {
+            'total_rounds': 8,
+            'times_caught': 2,
+            'total_points_earned': 105,
+            'favorite_location': 'Test Store',
+            'win': True
+        }
+
+        print_post_game_report(player, insights)
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+
+class TestLocationsWithEvents:
+    """Tests for location display with events."""
+
+    def test_print_locations_with_scout_rolls(self, mock_console, sample_location_manager):
+        """Test print_locations with Scout preview rolls."""
+        from game.ui import print_locations
+
+        console, output = mock_console
+
+        scout_rolls = {
+            sample_location_manager.get_location(0): 8,
+            sample_location_manager.get_location(1): 15
+        }
+
+        print_locations(sample_location_manager, scout_rolls=scout_rolls)
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_print_locations_with_point_hints(self, mock_console, sample_location_manager):
+        """Test print_locations with point tier hints."""
+        from game.ui import print_locations
+
+        console, output = mock_console
+
+        point_hints = {
+            sample_location_manager.get_location(0): "Low",
+            sample_location_manager.get_location(1): "High"
+        }
+
+        print_locations(sample_location_manager, point_hints=point_hints)
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+
+class TestAIThinking:
+    """Tests for AI thinking display."""
+
+    def test_show_ai_thinking(self, mock_console, monkeypatch):
+        """Test show_ai_thinking displays thinking message."""
+        from game.ui import show_ai_thinking
+        import time
+
+        console, output = mock_console
+
+        # Speed up the test by mocking sleep
+        monkeypatch.setattr(time, 'sleep', lambda x: None)
+
+        show_ai_thinking()
+
+        result = output.getvalue()
+        assert len(result) > 0
+
+    def test_create_progress_spinner(self, mock_console):
+        """Test create_progress_spinner returns Progress object."""
+        from game.ui import create_progress_spinner
+        from rich.progress import Progress
+
+        spinner = create_progress_spinner("Testing...")
+
+        assert isinstance(spinner, Progress)
