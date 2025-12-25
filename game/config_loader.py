@@ -61,8 +61,20 @@ class ConfigLoader:
         return self.hiding_config.get('mechanics', {})
 
     def get_hiding_spots(self):
-        """Get hiding location spots configuration."""
+        """Get hiding location spots configuration (backward compatibility)."""
+        # First try new format, then fall back to old format
+        options = self.hiding_config.get('location_escape_options', {})
+        if options:
+            # Filter to only hide type options
+            return {
+                loc: [opt for opt in opts if opt.get('type', 'hide') == 'hide']
+                for loc, opts in options.items()
+            }
         return self.hiding_config.get('location_hiding_spots', {})
+
+    def get_escape_options(self):
+        """Get all escape options (hiding spots + escape routes) by location."""
+        return self.hiding_config.get('location_escape_options', {})
 
     def get_events_settings(self):
         """Get events settings configuration."""

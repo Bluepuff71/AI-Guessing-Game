@@ -1,46 +1,50 @@
 {
   "mechanics": {
-    "run_point_retention": 0.8,
-    "base_run_escape_chance": 0.6,
-    "ai_threat_impact_multiplier": 0.5
+    "run_point_retention": 0.8
   },
-  "location_hiding_spots": {
+  "location_escape_options": {
     "Corner Store": [
       {
         "id": "store_stockroom",
         "name": "Behind Stockroom Boxes",
         "description": "Duck behind the stacked delivery boxes",
         "emoji": "📦",
-        "base_success_rate": 0.70,
-        "detection_difficulty": 0.3,
-        "ai_learning_weight": 1.0
+        "type": "hide"
       },
       {
         "id": "store_freezer",
         "name": "Walk-in Freezer",
         "description": "Hide in the cold storage unit",
         "emoji": "❄️",
-        "base_success_rate": 0.60,
-        "detection_difficulty": 0.4,
-        "ai_learning_weight": 1.2
+        "type": "hide"
       },
       {
         "id": "store_counter",
         "name": "Under Checkout Counter",
         "description": "Crouch beneath the checkout counter",
         "emoji": "🛒",
-        "base_success_rate": 0.50,
-        "detection_difficulty": 0.5,
-        "ai_learning_weight": 1.5
+        "type": "hide"
       },
       {
         "id": "store_bathroom",
         "name": "Employee Restroom",
         "description": "Lock yourself in the bathroom stall",
         "emoji": "🚻",
-        "base_success_rate": 0.75,
-        "detection_difficulty": 0.25,
-        "ai_learning_weight": 0.8
+        "type": "hide"
+      },
+      {
+        "id": "store_backdoor",
+        "name": "Back Alley Exit",
+        "description": "Sprint out through the service door",
+        "emoji": "🚪",
+        "type": "run"
+      },
+      {
+        "id": "store_window",
+        "name": "Side Window Dash",
+        "description": "Dive through the side window",
+        "emoji": "🪟",
+        "type": "run"
       }
     ],
     "Pawn Shop": [
@@ -49,36 +53,42 @@
         "name": "Small Safe Room",
         "description": "Squeeze into the compact vault",
         "emoji": "🔒",
-        "base_success_rate": 0.85,
-        "detection_difficulty": 0.15,
-        "ai_learning_weight": 0.6
+        "type": "hide"
       },
       {
         "id": "pawn_display",
         "name": "Display Case Cluster",
         "description": "Hide among the tall display cases",
         "emoji": "🖼️",
-        "base_success_rate": 0.55,
-        "detection_difficulty": 0.45,
-        "ai_learning_weight": 1.3
+        "type": "hide"
       },
       {
         "id": "pawn_office",
         "name": "Back Office",
         "description": "Hide in the cluttered back office",
         "emoji": "📁",
-        "base_success_rate": 0.65,
-        "detection_difficulty": 0.35,
-        "ai_learning_weight": 1.1
+        "type": "hide"
       },
       {
         "id": "pawn_ceiling",
         "name": "Ceiling Crawlspace",
         "description": "Climb up into the drop ceiling",
         "emoji": "⬆️",
-        "base_success_rate": 0.80,
-        "detection_difficulty": 0.2,
-        "ai_learning_weight": 0.7
+        "type": "hide"
+      },
+      {
+        "id": "pawn_alley",
+        "name": "Back Alley Escape",
+        "description": "Slip out through the narrow alley",
+        "emoji": "🏃",
+        "type": "run"
+      },
+      {
+        "id": "pawn_garage",
+        "name": "Loading Garage",
+        "description": "Run through the loading bay",
+        "emoji": "🚗",
+        "type": "run"
       }
     ],
     "Jewelry Store": [
@@ -87,36 +97,42 @@
         "name": "Reinforced Safe Room",
         "description": "Lock yourself in the main vault",
         "emoji": "💰",
-        "base_success_rate": 0.90,
-        "detection_difficulty": 0.1,
-        "ai_learning_weight": 0.5
+        "type": "hide"
       },
       {
         "id": "jewelry_display",
         "name": "Behind Glass Cases",
         "description": "Duck behind the jewelry displays",
         "emoji": "💎",
-        "base_success_rate": 0.45,
-        "detection_difficulty": 0.55,
-        "ai_learning_weight": 1.6
+        "type": "hide"
       },
       {
         "id": "jewelry_workshop",
         "name": "Repair Workshop",
         "description": "Hide among the tools and workbenches",
         "emoji": "🔧",
-        "base_success_rate": 0.60,
-        "detection_difficulty": 0.4,
-        "ai_learning_weight": 1.2
+        "type": "hide"
       },
       {
         "id": "jewelry_closet",
         "name": "Supply Closet",
         "description": "Squeeze into the storage closet",
         "emoji": "🚪",
-        "base_success_rate": 0.55,
-        "detection_difficulty": 0.45,
-        "ai_learning_weight": 1.4
+        "type": "hide"
+      },
+      {
+        "id": "jewelry_mall",
+        "name": "Mall Corridor",
+        "description": "Dash into the busy mall hallway",
+        "emoji": "🏬",
+        "type": "run"
+      },
+      {
+        "id": "jewelry_fire_exit",
+        "name": "Fire Exit Stairwell",
+        "description": "Escape down the fire stairs",
+        "emoji": "🔥",
+        "type": "run"
       }
     ],
     "Casino Vault": [
@@ -125,36 +141,42 @@
         "name": "Between Slot Machines",
         "description": "Hide in the maze of slot machines",
         "emoji": "🎰",
-        "base_success_rate": 0.50,
-        "detection_difficulty": 0.5,
-        "ai_learning_weight": 1.5
+        "type": "hide"
       },
       {
         "id": "casino_vault",
         "name": "Main Money Vault",
         "description": "Lock yourself in the fortified vault",
         "emoji": "🏦",
-        "base_success_rate": 0.95,
-        "detection_difficulty": 0.05,
-        "ai_learning_weight": 0.3
+        "type": "hide"
       },
       {
         "id": "casino_security",
         "name": "Security Control Room",
         "description": "Hide in the camera monitoring room",
         "emoji": "📹",
-        "base_success_rate": 0.40,
-        "detection_difficulty": 0.6,
-        "ai_learning_weight": 1.8
+        "type": "hide"
       },
       {
         "id": "casino_bar",
         "name": "Behind Bar Counter",
         "description": "Duck behind the casino bar",
         "emoji": "🍸",
-        "base_success_rate": 0.65,
-        "detection_difficulty": 0.35,
-        "ai_learning_weight": 1.1
+        "type": "hide"
+      },
+      {
+        "id": "casino_floor",
+        "name": "Crowded Casino Floor",
+        "description": "Blend into the gambling crowd",
+        "emoji": "🎲",
+        "type": "run"
+      },
+      {
+        "id": "casino_kitchen",
+        "name": "Kitchen Service Exit",
+        "description": "Run through the restaurant kitchen",
+        "emoji": "🍳",
+        "type": "run"
       }
     ],
     "Bank Heist": [
@@ -163,36 +185,42 @@
         "name": "Main Vault Chamber",
         "description": "Hide in the massive fortified vault",
         "emoji": "🔐",
-        "base_success_rate": 0.95,
-        "detection_difficulty": 0.05,
-        "ai_learning_weight": 0.3
+        "type": "hide"
       },
       {
         "id": "bank_teller",
         "name": "Teller Station",
         "description": "Crouch behind a teller booth",
         "emoji": "🏧",
-        "base_success_rate": 0.35,
-        "detection_difficulty": 0.65,
-        "ai_learning_weight": 2.0
+        "type": "hide"
       },
       {
         "id": "bank_office",
         "name": "Manager's Office",
         "description": "Hide in the executive office",
         "emoji": "👔",
-        "base_success_rate": 0.55,
-        "detection_difficulty": 0.45,
-        "ai_learning_weight": 1.4
+        "type": "hide"
       },
       {
         "id": "bank_basement",
         "name": "Basement Storage",
         "description": "Descend to the underground storage area",
         "emoji": "⬇️",
-        "base_success_rate": 0.75,
-        "detection_difficulty": 0.25,
-        "ai_learning_weight": 0.8
+        "type": "hide"
+      },
+      {
+        "id": "bank_lobby",
+        "name": "Main Lobby Sprint",
+        "description": "Make a break for the front doors",
+        "emoji": "🏛️",
+        "type": "run"
+      },
+      {
+        "id": "bank_parking",
+        "name": "Parking Garage",
+        "description": "Escape through the underground parking",
+        "emoji": "🅿️",
+        "type": "run"
       }
     ]
   }

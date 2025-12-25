@@ -24,14 +24,17 @@ class Player:
         self.choice_history: List[str] = []  # Location names chosen
         self.round_history: List[Dict[str, Any]] = []  # Full round data
 
-        # Hiding/running tracking
-        self.hide_run_history: List[Dict[str, Any]] = []  # All hide/run attempts
+        # Escape option tracking (for prediction-based mechanics)
+        self.escape_option_history: List[str] = []  # Escape option IDs chosen this game
+        self.hide_run_history: List[Dict[str, Any]] = []  # All escape attempts
         self.hiding_stats: Dict[str, Any] = {
+            'total_escape_attempts': 0,
+            'successful_escapes': 0,
             'total_hide_attempts': 0,
             'successful_hides': 0,
             'total_run_attempts': 0,
             'successful_runs': 0,
-            'favorite_hide_spots': {},  # {spot_id: count}
+            'favorite_escape_options': {},  # {option_id: count}
             'hide_vs_run_ratio': 0.0  # Preference for hiding vs running
         }
 
@@ -90,44 +93,54 @@ class Player:
             'items_held': [item.name for item in self.get_active_items()],
         })
 
-    def record_hide_run_attempt(self, hide_run_result: Dict[str, Any], round_num: int):
+    def record_escape_attempt(self, escape_result: Dict[str, Any], round_num: int):
         """
-        Record a hide or run attempt for AI learning.
+        Record an escape attempt for AI learning (prediction-based system).
 
         Args:
-            hide_run_result: Dict containing choice, escaped, points_awarded, etc.
+            escape_result: Dict containing escaped, player_choice_id, choice_type, etc.
             round_num: Current round number
         """
-        choice = hide_run_result['choice']  # 'hide' or 'run'
-        escaped = hide_run_result['escaped']
+        choice_type = escape_result.get('choice_type', 'hide')
+        escaped = escape_result['escaped']
+        option_id = escape_result.get('player_choice_id')
 
-        # Record in history
+        # Record in escape option history for within-game learning
+        if option_id:
+            self.escape_option_history.append(option_id)
+
+        # Record in full history
         self.hide_run_history.append({
             'round': round_num,
-            'choice': choice,
+            'choice_type': choice_type,
             'escaped': escaped,
-            'hide_spot_id': hide_run_result.get('hide_spot_id'),
-            'ai_threat_level': hide_run_result.get('ai_threat_level', 0.0),
+            'option_id': option_id,
+            'option_name': escape_result.get('player_choice_name'),
+            'ai_prediction_id': escape_result.get('ai_prediction_id'),
+            'ai_was_correct': escape_result.get('ai_was_correct', False),
             'points_before': self.points,
-            'points_retained': hide_run_result.get('points_retained', 0)
+            'points_awarded': escape_result.get('points_awarded', 0)
         })
 
         # Update statistics
-        if choice == 'hide':
+        self.hiding_stats['total_escape_attempts'] += 1
+        if escaped:
+            self.hiding_stats['successful_escapes'] += 1
+
+        if choice_type == 'hide':
             self.hiding_stats['total_hide_attempts'] += 1
             if escaped:
                 self.hiding_stats['successful_hides'] += 1
-
-            # Track favorite hiding spots
-            spot_id = hide_run_result.get('hide_spot_id')
-            if spot_id:
-                if spot_id not in self.hiding_stats['favorite_hide_spots']:
-                    self.hiding_stats['favorite_hide_spots'][spot_id] = 0
-                self.hiding_stats['favorite_hide_spots'][spot_id] += 1
         else:  # run
             self.hiding_stats['total_run_attempts'] += 1
             if escaped:
                 self.hiding_stats['successful_runs'] += 1
+
+        # Track favorite escape options
+        if option_id:
+            if option_id not in self.hiding_stats['favorite_escape_options']:
+                self.hiding_stats['favorite_escape_options'][option_id] = 0
+            self.hiding_stats['favorite_escape_options'][option_id] += 1
 
         # Update hide vs run ratio
         total = self.hiding_stats['total_hide_attempts'] + self.hiding_stats['total_run_attempts']

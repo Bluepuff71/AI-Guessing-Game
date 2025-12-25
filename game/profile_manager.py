@@ -43,15 +43,18 @@ class BehavioralStats:
 
 @dataclass
 class HidingBehavioralStats:
-    """Player's hiding and running patterns when caught."""
+    """Player's escape patterns when caught (prediction-based system)."""
     total_caught_instances: int = 0  # Total times caught (regardless of escape)
+    total_escapes: int = 0  # Total successful escapes
     hide_attempts: int = 0
     run_attempts: int = 0
     hide_success_rate: float = 0.0
     run_success_rate: float = 0.0
-    favorite_hiding_spots: Dict[str, int] = field(default_factory=dict)  # spot_id -> count
+    favorite_escape_options: Dict[str, int] = field(default_factory=dict)  # option_id -> count
+    escape_option_history: List[str] = field(default_factory=list)  # Last N escape choices for recency
+    ai_prediction_accuracy: float = 0.0  # How often AI correctly predicts this player
+    ai_correct_predictions: int = 0  # Raw count of correct AI predictions
     location_specific_preferences: Dict[str, str] = field(default_factory=dict)  # location -> 'hide'|'run'
-    ai_detection_rate_by_spot: Dict[str, float] = field(default_factory=dict)  # spot_id -> detection_rate
     risk_profile_when_caught: str = "balanced"  # "aggressive_hider", "runner", "balanced"
 
 
@@ -391,7 +394,7 @@ class ProfileManager:
                 profile.behavioral_stats.predictability_score = max_freq / total_choices
 
     def _update_hiding_stats(self, profile: PlayerProfile, game_data: Dict[str, Any]) -> None:
-        """Update hiding/running patterns from game data."""
+        """Update escape patterns from game data (prediction-based system)."""
         hiding_data = game_data.get('hiding_data', {})
 
         if not hiding_data:
@@ -400,27 +403,44 @@ class ProfileManager:
 
         # Update totals
         profile.hiding_stats.total_caught_instances += hiding_data.get('total_caught_instances', 0)
+        profile.hiding_stats.total_escapes += hiding_data.get('total_escapes', 0)
         profile.hiding_stats.hide_attempts += hiding_data.get('hide_attempts', 0)
         profile.hiding_stats.run_attempts += hiding_data.get('run_attempts', 0)
 
-        # Update hiding spot frequencies
-        favorite_spots = hiding_data.get('favorite_hiding_spots', {})
-        for spot_id, count in favorite_spots.items():
-            if spot_id in profile.hiding_stats.favorite_hiding_spots:
-                profile.hiding_stats.favorite_hiding_spots[spot_id] += count
+        # Update escape option frequencies (new system)
+        escape_options = hiding_data.get('favorite_escape_options', {})
+        for option_id, count in escape_options.items():
+            if option_id in profile.hiding_stats.favorite_escape_options:
+                profile.hiding_stats.favorite_escape_options[option_id] += count
             else:
-                profile.hiding_stats.favorite_hiding_spots[spot_id] = count
+                profile.hiding_stats.favorite_escape_options[option_id] = count
+
+        # Add to escape option history (keep last 20 for recency-weighted prediction)
+        new_history = hiding_data.get('escape_option_history', [])
+        profile.hiding_stats.escape_option_history.extend(new_history)
+        profile.hiding_stats.escape_option_history = profile.hiding_stats.escape_option_history[-20:]
+
+        # Update AI prediction accuracy
+        ai_correct = hiding_data.get('ai_correct_predictions', 0)
+        profile.hiding_stats.ai_correct_predictions += ai_correct
+        if profile.hiding_stats.total_caught_instances > 0:
+            profile.hiding_stats.ai_prediction_accuracy = (
+                profile.hiding_stats.ai_correct_predictions /
+                profile.hiding_stats.total_caught_instances
+            )
 
         # Calculate success rates
         if profile.hiding_stats.hide_attempts > 0:
             successful_hides = hiding_data.get('successful_hides', 0)
-            total_successful_hides = profile.hiding_stats.hide_success_rate * (profile.hiding_stats.hide_attempts - hiding_data.get('hide_attempts', 0))
+            prev_hide_attempts = profile.hiding_stats.hide_attempts - hiding_data.get('hide_attempts', 0)
+            total_successful_hides = profile.hiding_stats.hide_success_rate * prev_hide_attempts
             total_successful_hides += successful_hides
             profile.hiding_stats.hide_success_rate = total_successful_hides / profile.hiding_stats.hide_attempts
 
         if profile.hiding_stats.run_attempts > 0:
             successful_runs = hiding_data.get('successful_runs', 0)
-            total_successful_runs = profile.hiding_stats.run_success_rate * (profile.hiding_stats.run_attempts - hiding_data.get('run_attempts', 0))
+            prev_run_attempts = profile.hiding_stats.run_attempts - hiding_data.get('run_attempts', 0)
+            total_successful_runs = profile.hiding_stats.run_success_rate * prev_run_attempts
             total_successful_runs += successful_runs
             profile.hiding_stats.run_success_rate = total_successful_runs / profile.hiding_stats.run_attempts
 

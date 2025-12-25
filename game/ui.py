@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from game.player import Player
 from game.locations import Location, LocationManager
 from game.items import ItemShop, ItemType
+from game.animations import play_elimination_animation
 
 
 console = Console()
@@ -562,138 +563,150 @@ def print_caught_message(player, location):
     console.print()
 
 
-def get_hide_or_run_choice(player, location, ai_threat: float) -> str:
+def select_escape_option(escape_options: list, player, location_points: int) -> dict:
     """
-    Present hide or run choice to player.
+    Present all escape options and let player choose.
+    This is the prediction-based escape system where player tries to outsmart the AI.
 
     Args:
+        escape_options: List of escape option dicts with id, name, description, emoji, type
         player: Player who was caught
-        location: Location where caught
-        ai_threat: AI threat level (0.0-1.0)
+        location_points: Points rolled at this location
 
     Returns:
-        'hide' or 'run'
+        Selected escape option dict
     """
-    console.print(f"[bold cyan]What will you do, [{player.color}]{player.name}[/{player.color}]?[/bold cyan]\n")
+    console.print(f"[bold cyan]Choose your escape, [{player.color}]{player.name}[/{player.color}]![/bold cyan]\n")
+    console.print("[yellow]The AI is trying to predict your choice...[/yellow]")
+    console.print("[dim]Pick DIFFERENTLY from the AI to survive![/dim]\n")
 
-    # Show threat level
-    threat_bar = "█" * int(ai_threat * 10) + "░" * (10 - int(ai_threat * 10))
-    if ai_threat > 0.8:
-        threat_label = "CRITICAL"
-        threat_color = "red"
-    elif ai_threat > 0.6:
-        threat_label = "HIGH"
-        threat_color = "red"
-    elif ai_threat > 0.4:
-        threat_label = "MODERATE"
-        threat_color = "yellow"
-    else:
-        threat_label = "LOW"
-        threat_color = "green"
+    # Separate hiding spots and escape routes
+    hiding_spots = [opt for opt in escape_options if opt.get('type', 'hide') == 'hide']
+    escape_routes = [opt for opt in escape_options if opt.get('type') == 'run']
 
-    console.print(f"AI Threat Level: [{threat_color}]{threat_bar} {ai_threat:.0%} ({threat_label})[/{threat_color}]\n")
+    # Calculate run points
+    retention_points = int(location_points * 0.8)
 
-    # Show options
-    console.print("[bold green][1] 🏃 RUN[/bold green]")
-    console.print("    - Keep 80% of your points")
-    console.print("    - Escape chance varies by AI threat (typically 40-70%)")
-    console.print()
+    # Build ordered list for selection
+    all_options = []
 
-    console.print("[bold yellow][2] 🫣 HIDE[/bold yellow]")
-    console.print(f"    - Choose from 4 hiding spots at {location.name}")
-    console.print("    - Keep 0 points but higher escape chance")
-    console.print("    - Different spots have different success rates")
-    console.print()
-
-    while True:
-        choice = console.input("[bold]Choose (1=Run, 2=Hide):[/bold] ").strip()
-        if choice == '1':
-            return 'run'
-        elif choice == '2':
-            return 'hide'
-        else:
-            console.print("[red]Invalid choice. Enter 1 or 2.[/red]")
-
-
-def select_hiding_spot(hiding_spots: list, player) -> dict:
-    """
-    Show hiding spots and let player choose.
-
-    Args:
-        hiding_spots: List of hiding spot dictionaries
-        player: Player making the choice
-
-    Returns:
-        Selected spot dict
-    """
-    console.print(f"\n[bold cyan]Choose your hiding spot:[/bold cyan]\n")
-
+    # Show hiding spots
+    console.print("[bold green]HIDING SPOTS[/bold green] [dim](Survive with 0 points)[/dim]")
     for i, spot in enumerate(hiding_spots, 1):
-        # Show base success rate (don't reveal AI adjustments)
-        success_display = int(spot['base_success_rate'] * 100)
+        console.print(f"  [{i}] {spot['emoji']} [bold]{spot['name']}[/bold]")
+        console.print(f"      [dim]{spot['description']}[/dim]")
+        all_options.append(spot)
 
-        console.print(f"[{i}] {spot['emoji']} [bold]{spot['name']}[/bold]")
-        console.print(f"    {spot['description']}")
-        console.print(f"    [dim]Base success: ~{success_display}%[/dim]")
-        console.print()
+    console.print()
 
+    # Show escape routes
+    console.print(f"[bold yellow]ESCAPE ROUTES[/bold yellow] [dim](Survive with {retention_points} points)[/dim]")
+    offset = len(hiding_spots)
+    for i, route in enumerate(escape_routes, offset + 1):
+        console.print(f"  [{i}] {route['emoji']} [bold]{route['name']}[/bold]")
+        console.print(f"      [dim]{route['description']}[/dim]")
+        all_options.append(route)
+
+    console.print()
+
+    # Get player choice
     while True:
-        choice = console.input(f"[bold]Select hiding spot (1-{len(hiding_spots)}):[/bold] ").strip()
+        choice = console.input(f"[bold]Select option (1-{len(all_options)}):[/bold] ").strip()
         try:
             idx = int(choice) - 1
-            if 0 <= idx < len(hiding_spots):
-                return hiding_spots[idx]
+            if 0 <= idx < len(all_options):
+                return all_options[idx]
         except ValueError:
             pass
-        console.print(f"[red]Invalid choice. Enter 1-{len(hiding_spots)}.[/red]")
+        console.print(f"[red]Invalid choice. Enter 1-{len(all_options)}.[/red]")
 
 
-def confirm_run_attempt(player, escape_chance: float, points_after_escape: int, location_points: int) -> bool:
+def print_escape_result(player, result: dict, escape_options: list = None):
     """
-    Show run details and confirm choice.
+    Print escape attempt result with dramatic AI prediction reveal.
 
     Args:
-        player: Player attempting to run
-        escape_chance: Calculated escape probability
-        points_after_escape: Total points if escape succeeds
-        location_points: Points earned at this location
-
-    Returns:
-        True if confirmed, False if player wants to hide instead
+        player: Player who attempted escape
+        result: Dict with escaped, player_choice_id, ai_prediction_id, etc.
+        escape_options: Optional list of escape options to get names
     """
-    console.print(f"\n[bold yellow]Run Attempt Details:[/bold yellow]")
-    console.print(f"  Current points: [yellow]{player.points}[/yellow]")
-    console.print(f"  Location points earned: [yellow]{location_points}[/yellow]")
-    console.print(f"  Points if escaped: [green]{points_after_escape}[/green] (keep 80% of location points)")
-    console.print(f"  Points if caught: [red]{player.points}[/red] (lose all location points)")
+    import time
 
-    # Color code based on chance
-    if escape_chance > 0.6:
-        chance_color = "green"
-    elif escape_chance > 0.4:
-        chance_color = "yellow"
-    else:
-        chance_color = "red"
-
-    console.print(f"  Escape chance: [{chance_color}]{escape_chance:.0%}[/{chance_color}]")
+    console.print()
+    console.print("[bold cyan]" + "=" * 50 + "[/bold cyan]")
+    console.print("[bold cyan]        THE AI'S PREDICTION...[/bold cyan]")
+    console.print("[bold cyan]" + "=" * 50 + "[/bold cyan]")
     console.print()
 
-    choice = console.input("[bold]Confirm run? (y/n):[/bold] ").strip().lower()
-    return choice in ['y', 'yes']
+    # Find option names
+    player_choice_name = result.get('player_choice_name', result.get('player_choice_id', '???'))
+    ai_prediction_name = result.get('ai_prediction_id', '???')
+
+    # Try to get AI prediction name from escape options
+    if escape_options:
+        for opt in escape_options:
+            if opt['id'] == result.get('ai_prediction_id'):
+                ai_prediction_name = opt['name']
+                break
+
+    # Dramatic pause
+    time.sleep(0.5)
+
+    # Show AI prediction
+    console.print(f"[yellow]AI predicted: [bold]{ai_prediction_name}[/bold][/yellow]")
+    time.sleep(0.3)
+
+    # Show player choice
+    console.print(f"[cyan]You chose: [bold]{player_choice_name}[/bold][/cyan]")
+    console.print()
+    time.sleep(0.3)
+
+    if result['escaped']:
+        # SUCCESS - Player outsmarted the AI
+        console.print("[bold green]" + "=" * 50 + "[/bold green]")
+        console.print(f"[bold green]    OUTSMARTED! [{player.color}]{player.name}[/{player.color}] escapes![/bold green]")
+        console.print("[bold green]" + "=" * 50 + "[/bold green]")
+        console.print()
+
+        if result.get('choice_type') == 'run':
+            console.print(f"[green]You kept {result['points_awarded']} points (80% of {result.get('location_points', 0)})[/green]")
+        else:
+            console.print(f"[green]You survived by hiding! (0 points earned)[/green]")
+
+        console.print()
+        console.print(f"[dim]Current score: {player.points} pts[/dim]")
+    else:
+        # FAILURE - AI predicted correctly
+        play_elimination_animation()
+
+        console.print("[bold red]" + "=" * 50 + "[/bold red]")
+        console.print(f"[bold red]    PREDICTED! The AI knew your move![/bold red]")
+        console.print("[bold red]" + "=" * 50 + "[/bold red]")
+        console.print()
+
+        console.print(f"[red]{player.name} is [bold]ELIMINATED[/bold][/red]")
+        console.print(f"[dim]Final score: {player.points} pts[/dim]")
+
+    console.print()
+    console.input("[dim]Press Enter to continue...[/dim]")
 
 
 def print_escape_success(player, result: dict, search_location=None):
-    """Print successful escape message."""
+    """Print successful escape message (legacy - use print_escape_result instead)."""
     console.print()
 
-    if result['choice'] == 'hide':
-        console.print(f"[bold green]✅ [{player.color}]{player.name}[/{player.color}] successfully hid in {result['hide_spot_name']}![/bold green]")
-        console.print(f"[green]The AI didn't find you! (Success chance was {result['success_chance']:.0%})[/green]")
+    if result.get('choice') == 'hide' or result.get('choice_type') == 'hide':
+        spot_name = result.get('hide_spot_name') or result.get('player_choice_name', 'hiding spot')
+        console.print(f"[bold green]✅ [{player.color}]{player.name}[/{player.color}] successfully hid in {spot_name}![/bold green]")
+        if 'success_chance' in result:
+            console.print(f"[green]The AI didn't find you! (Success chance was {result['success_chance']:.0%})[/green]")
         console.print(f"[yellow]Points: {player.points} (no points earned from hiding)[/yellow]")
     else:  # run
         console.print(f"[bold green]✅ [{player.color}]{player.name}[/{player.color}] successfully escaped![/bold green]")
-        console.print(f"[green]You got away! (Escape chance was {result['success_chance']:.0%})[/green]")
-        console.print(f"[yellow]Points retained: {result['points_retained']} (lost 20%)[/yellow]")
+        if 'success_chance' in result:
+            console.print(f"[green]You got away! (Escape chance was {result['success_chance']:.0%})[/green]")
+        points_kept = result.get('points_retained') or result.get('points_awarded', 0)
+        console.print(f"[yellow]Points retained: {points_kept} (lost 20%)[/yellow]")
 
     # Reveal where AI searched
     if search_location:
@@ -705,15 +718,21 @@ def print_escape_success(player, result: dict, search_location=None):
 
 
 def print_escape_failure(player, result: dict, search_location=None):
-    """Print failed escape message."""
+    """Print failed escape message with elimination animation (legacy - use print_escape_result instead)."""
+    # Play the dramatic elimination animation
+    play_elimination_animation()
+
     console.print()
 
-    if result['choice'] == 'hide':
-        console.print(f"[bold red]❌ The AI found [{player.color}]{player.name}[/{player.color}] hiding in {result['hide_spot_name']}![/bold red]")
-        console.print(f"[red]Your hiding spot was discovered! (Success chance was {result['success_chance']:.0%})[/red]")
+    if result.get('choice') == 'hide' or result.get('choice_type') == 'hide':
+        spot_name = result.get('hide_spot_name') or result.get('player_choice_name', 'hiding spot')
+        console.print(f"[bold red]❌ The AI found [{player.color}]{player.name}[/{player.color}] hiding in {spot_name}![/bold red]")
+        if 'success_chance' in result:
+            console.print(f"[red]Your hiding spot was discovered! (Success chance was {result['success_chance']:.0%})[/red]")
     else:  # run
         console.print(f"[bold red]❌ [{player.color}]{player.name}[/{player.color}] was caught while trying to escape![/bold red]")
-        console.print(f"[red]The AI tracked you down! (Escape chance was {result['success_chance']:.0%})[/red]")
+        if 'success_chance' in result:
+            console.print(f"[red]The AI tracked you down! (Escape chance was {result['success_chance']:.0%})[/red]")
 
     # Reveal where AI searched
     if search_location:
