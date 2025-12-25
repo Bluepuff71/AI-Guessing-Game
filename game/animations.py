@@ -7,6 +7,8 @@ import time
 # Path to assets folder
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
 ELIMINATION_GIF = os.path.join(ASSETS_DIR, "elimination.gif")
+VICTORY_GIF = os.path.join(ASSETS_DIR, "victory.gif")
+ESCAPE_GIF = os.path.join(ASSETS_DIR, "escape.gif")
 
 
 def play_gif_popup(gif_path: str, duration: float = None):
@@ -119,3 +121,49 @@ def play_elimination_animation():
     except Exception:
         print("\n>>> TERMINATED <<<\n")
         time.sleep(1)
+
+
+def play_victory_animation():
+    """Play the victory animation when a player wins the game."""
+    # Try GIF first
+    if play_gif_popup(VICTORY_GIF, duration=3.0):
+        return
+
+    # Fallback: simple text flash
+    try:
+        from rich.console import Console
+        console = Console()
+
+        for i in range(3):
+            os.system('cls' if os.name == 'nt' else 'clear')
+            console.print()
+            style = "bold green" if i % 2 == 0 else "bold yellow"
+            console.print(f"\n\n                    [{style}]>>> VICTORY! <<<[/{style}]\n")
+            time.sleep(0.3)
+        time.sleep(0.5)
+    except Exception:
+        print("\n>>> VICTORY! <<<\n")
+        time.sleep(1)
+
+
+def play_escape_animation():
+    """Play the escape animation when a player outsmarts the AI."""
+    # Try GIF first
+    if play_gif_popup(ESCAPE_GIF, duration=2.0):
+        return
+
+    # Fallback: simple text flash
+    try:
+        from rich.console import Console
+        console = Console()
+
+        for i in range(2):
+            os.system('cls' if os.name == 'nt' else 'clear')
+            console.print()
+            style = "bold green" if i % 2 == 0 else "bold cyan"
+            console.print(f"\n\n                    [{style}]>>> ESCAPED! <<<[/{style}]\n")
+            time.sleep(0.25)
+        time.sleep(0.3)
+    except Exception:
+        print("\n>>> ESCAPED! <<<\n")
+        time.sleep(0.5)

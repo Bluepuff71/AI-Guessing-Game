@@ -1,7 +1,7 @@
 """Player class and management."""
 from typing import List, Optional, Dict, Any
-from game.items import Item, ItemType
 from game.locations import Location
+from game.passives import Passive, PassiveType, PassiveManager
 
 
 # Color palette for players
@@ -18,7 +18,7 @@ class Player:
         self.color = PLAYER_COLORS[player_id % len(PLAYER_COLORS)]  # Assign unique color
         self.points = 0
         self.alive = True
-        self.items: List[Item] = []
+        self.passive_manager = PassiveManager()
 
         # History tracking for AI
         self.choice_history: List[str] = []  # Location names chosen
@@ -42,37 +42,21 @@ class Player:
         """Add points to player."""
         self.points += points
 
-    def buy_item(self, item: Item) -> bool:
-        """Attempt to buy an item. Returns True if successful."""
-        if self.points >= item.cost:
-            self.points -= item.cost
-            self.items.append(item)
-            return True
+    def buy_passive(self, passive: Passive) -> bool:
+        """Attempt to buy a passive ability. Returns True if successful."""
+        if self.points >= passive.cost:
+            if self.passive_manager.add_passive(passive):
+                self.points -= passive.cost
+                return True
         return False
 
-    def has_item(self, item_type: ItemType) -> bool:
-        """Check if player has an item of the given type."""
-        return any(item.type == item_type and not item.consumed
-                   for item in self.items)
+    def has_passive(self, passive_type: PassiveType) -> bool:
+        """Check if player has a specific passive."""
+        return self.passive_manager.has_passive(passive_type)
 
-    def use_item(self, item_type: ItemType) -> Optional[Item]:
-        """Use an item (mark as consumed). Returns the item if found."""
-        for item in self.items:
-            if item.type == item_type and not item.consumed:
-                item.consumed = True
-                return item
-        return None
-
-    def get_item(self, item_type: ItemType) -> Optional[Item]:
-        """Get a specific item by type."""
-        for item in self.items:
-            if item.type == item_type:
-                return item
-        return None
-
-    def get_active_items(self) -> List[Item]:
-        """Get list of items that haven't been consumed."""
-        return [item for item in self.items if not item.consumed]
+    def get_passives(self) -> list:
+        """Get all owned passives."""
+        return self.passive_manager.get_all()
 
     def record_choice(self, location: Location, round_num: int,
                      caught: bool, points_earned: int, location_value: int = None):
@@ -90,7 +74,7 @@ class Player:
             'points_before': self.points - points_earned,
             'points_earned': points_earned,
             'caught': caught,
-            'items_held': [item.name for item in self.get_active_items()],
+            'passives_held': [p.name for p in self.get_passives()],
         })
 
     def record_escape_attempt(self, escape_result: Dict[str, Any], round_num: int):
@@ -184,5 +168,6 @@ class Player:
         }
 
     def __str__(self) -> str:
-        items_str = f" [{', '.join(i.name for i in self.get_active_items())}]" if self.get_active_items() else ""
-        return f"{self.name} - {self.points} pts{items_str}"
+        passives = self.get_passives()
+        passives_str = f" [{', '.join(p.name for p in passives)}]" if passives else ""
+        return f"{self.name} - {self.points} pts{passives_str}"

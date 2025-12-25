@@ -1,12 +1,13 @@
 """Main game engine and loop."""
 import json
 import os
+import random
 import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from game.player import Player
 from game.locations import LocationManager, Location
-from game.items import ItemShop, ItemType, Item
+from game.passives import PassiveShop, PassiveType, Passive
 from game import ui
 from game.config_loader import config
 from ai.predictor import AIPredictor
@@ -33,7 +34,6 @@ class GameEngine:
         self.game_over = False
         self.winner: Optional[Player] = None
         self.win_threshold = config.get('game', 'win_threshold', default=100)
-        self.scout_rolls: Dict[int, Dict[str, int]] = {}  # player_id -> {location_name: roll_value}
         self.last_ai_search_location: Optional[Location] = None  # Track previous round's AI search
 
     def setup_game(self):
@@ -137,10 +137,9 @@ class GameEngine:
             # Show current standings WITH choices made so far
             ui.print_standings(self.players, player_choices)
 
-            # Show locations (same for all players this round)
-            # Generate scout rolls if player has Scout item
-            scout_rolls = self._generate_scout_rolls_if_needed(player)
-            ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, scout_rolls)
+            # Show locations with point hints if player has Inside Knowledge
+            point_hints = self._generate_point_hints(player)
+            ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, point_hints=point_hints)
 
             # Shop phase
             self.shop_phase(player)
@@ -169,7 +168,7 @@ class GameEngine:
         self.check_game_over()
 
     def shop_phase(self, player: Player):
-        """Handle shopping for a player."""
+        """Handle shopping for passive abilities."""
         # Skip shop if player has no points
         if player.points == 0:
             ui.console.print(f"Your points: [yellow]{player.points}[/yellow]")
@@ -181,114 +180,98 @@ class GameEngine:
             # Display current state
             ui.console.print(f"Your points: [yellow]{player.points}[/yellow]")
 
-            active_items = player.get_active_items()
-            if active_items:
-                items_str = ", ".join(item.name for item in active_items)
-                ui.console.print(f"Your items: [magenta]{items_str}[/magenta]")
+            passives = player.get_passives()
+            if passives:
+                passives_str = ", ".join(f"{p.emoji} {p.name}" for p in passives)
+                ui.console.print(f"Your passives: [cyan]{passives_str}[/cyan]")
             else:
-                ui.console.print("Your items: [dim]None[/dim]")
+                ui.console.print("Your passives: [dim]None[/dim]")
 
             ui.console.print()
-            ui.print_shop()
+            ui.print_passive_shop(player)
 
             # Ask if player wants to buy
-            num_items = len(list(ItemType))
-            choice = ui.get_player_input(f"Buy item? (1-{num_items} or Enter to skip): ", None, player.color)
+            num_passives = PassiveShop.get_passive_count()
+            choice = ui.get_player_input(f"Buy passive? (1-{num_passives} or Enter to skip): ", None, player.color)
 
             # Skip if empty or "skip"
             if choice.strip() == "" or choice.lower() == "skip":
                 ui.console.print()
                 return
 
-            # Try to purchase item
+            # Try to purchase passive
             try:
-                item_num = int(choice)
-                if 1 <= item_num <= num_items:
-                    item_types = list(ItemType)
-                    item_type = item_types[item_num - 1]
-                    item = ItemShop.get_item(item_type)
+                passive_num = int(choice)
+                if 1 <= passive_num <= num_passives:
+                    passive = PassiveShop.get_passive_by_index(passive_num)
 
-                    if player.buy_item(item):
-                        ui.console.print(f"[green]✓ Bought {item.name} for {item.cost} pts[/green]")
+                    if passive is None:
+                        ui.console.print("[red]Invalid passive[/red]")
+                        continue
 
-                        # Track if item has its own prompt
-                        auto_consumed_item = False
+                    # Check if already owned
+                    if player.has_passive(passive.type):
+                        ui.console.print(f"[yellow]You already own {passive.name}![/yellow]")
+                        ui.console.print()
+                        continue
 
-                        # Auto-activate items based on type (only Intel Report is immediate)
-                        if item_type == ItemType.INTEL_REPORT:
-                            self.show_intel_report(player)
-                            item.consumed = True  # Intel Report is consumed immediately
-                            auto_consumed_item = True
-                        # Scout and Smoke Bomb are saved for later use - don't consume them here
-
-                        # Only show prompt for items without their own UI
-                        if not auto_consumed_item:
-                            ui.console.input("\n[dim]Press Enter to continue shopping...[/dim]")
+                    if player.buy_passive(passive):
+                        ui.console.print(f"[green]✓ Bought {passive.emoji} {passive.name} for {passive.cost} pts[/green]")
+                        ui.console.input("\n[dim]Press Enter to continue shopping...[/dim]")
                         ui.clear()
                         ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
 
-                        # Show locations so player has context
-                        # Generate scout rolls if player has Scout item
-                        scout_rolls = self._generate_scout_rolls_if_needed(player)
-                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, scout_rolls)
+                        # Show locations with point hints if player has Inside Knowledge
+                        point_hints = self._generate_point_hints(player)
+                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, point_hints=point_hints)
 
                         ui.console.print()
                         # Continue loop to allow more purchases
                     else:
-                        ui.console.print(f"[red]Not enough points! Need {item.cost}, have {player.points}[/red]")
+                        ui.console.print(f"[red]Not enough points! Need {passive.cost}, have {player.points}[/red]")
                         ui.console.input("\n[dim]Press Enter to continue...[/dim]")
                         ui.clear()
                         ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
-                        scout_rolls = self._generate_scout_rolls_if_needed(player)
-                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, scout_rolls)
+                        point_hints = self._generate_point_hints(player)
+                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, point_hints=point_hints)
                         ui.console.print()
                         # Continue loop, don't exit
                 else:
-                    ui.console.print(f"[red]Invalid choice - please enter 1-{num_items}[/red]")
+                    ui.console.print(f"[red]Invalid choice - please enter 1-{num_passives}[/red]")
                     ui.console.print()
             except (ValueError, IndexError):
                 ui.console.print("[red]Invalid choice[/red]")
                 ui.console.print()
 
-    def show_scout_preview(self, player: Player):
-        """Show Scout preview of loot rolls for all locations."""
-        ui.console.print("\n[bold cyan]📡 SCOUT PREVIEW - YOUR POTENTIAL ROLLS:[/bold cyan]\n")
+    def _generate_point_hints(self, player: Player) -> Optional[Dict[str, str]]:
+        """Generate point hints if player has Inside Knowledge passive.
 
-        # Clear and cache preview rolls for this player
-        self.scout_rolls[player.id] = {}
-
-        # Generate preview rolls for all locations
-        locations = self.location_manager.get_all()
-        for i, loc in enumerate(locations, 1):
-            preview_roll = loc.roll_points()
-            self.scout_rolls[player.id][loc.name] = preview_roll  # Cache it
-            ui.console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{preview_roll:>2} pts[/yellow] [dim](range: {loc.get_range_str()})[/dim]")
-
-        ui.console.print("\n[dim]Note: These are YOUR potential rolls. Other players will get different amounts.[/dim]")
-
-    def _generate_scout_rolls_if_needed(self, player: Player) -> Optional[Dict[str, int]]:
-        """Generate scout rolls for a player if they have Scout item active.
-        Returns the scout rolls dict or None if player doesn't have Scout."""
-        if not player.has_item(ItemType.SCOUT):
+        Returns dict of location_name -> "Low"/"Med"/"High" hint, or None if no passive.
+        """
+        if not player.has_passive(PassiveType.INSIDE_KNOWLEDGE):
             return None
 
-        # Only generate if not already generated for this player this round
-        if player.id not in self.scout_rolls:
-            self.scout_rolls[player.id] = {}
-            locations = self.location_manager.get_all()
-            for loc in locations:
-                preview_roll = loc.roll_points()
-                self.scout_rolls[player.id][loc.name] = preview_roll
+        hints = {}
+        for loc in self.location_manager.get_all():
+            avg = (loc.min_points + loc.max_points) / 2
+            if avg <= 10:
+                hints[loc.name] = "Low"
+            elif avg <= 20:
+                hints[loc.name] = "Med"
+            else:
+                hints[loc.name] = "High"
 
-        return self.scout_rolls[player.id]
+        return hints
 
     def show_intel_report(self, player: Player):
-        """Show Intel Report to a player."""
+        """Show Intel Report to a player based on their AI Whisperer passive."""
         from ai.features import calculate_predictability
-        from ai.predictor import AIPredictor
 
         predictability = calculate_predictability(player)
         threat_level = self.ai._calculate_win_threat(player)
+
+        # Determine detail level based on AI Whisperer passive
+        detail_level = player.passive_manager.get_intel_level()
 
         insights = []
         behavior = player.get_behavior_summary()
@@ -300,7 +283,7 @@ class GameEngine:
 
         if behavior['choice_variety'] < 0.5:
             num_locations = len(self.location_manager)
-            unique_locations = len(behavior['location_frequencies'])  # Direct count from dict
+            unique_locations = len(behavior['location_frequencies'])
             insights.append(f"Limited variety (only {unique_locations} of {num_locations} locations visited)")
 
         if player.choice_history:
@@ -316,7 +299,6 @@ class GameEngine:
         # Add AI Memory section if player has a profile
         ai_memory = None
         if hasattr(player, 'profile_id') and player.profile_id:
-            from game.profile_manager import ProfileManager
             pm = ProfileManager()
             profile = pm.load_profile(player.profile_id)
             if profile:
@@ -336,7 +318,7 @@ class GameEngine:
                     }
                 }
 
-        ui.show_intel_report(player, threat_level, predictability, insights, ai_memory)
+        ui.show_intel_report(player, threat_level, predictability, insights, ai_memory, detail_level)
         ui.console.input("[dim]Press Enter to continue...[/dim]")
 
     def choose_location_phase(self, player: Player) -> Location:
@@ -349,10 +331,6 @@ class GameEngine:
         location = self.location_manager.get_location(location_index)
 
         ui.console.print(f"[green]You chose: {location.emoji} {location.name} ({location.get_range_str()} pts)[/green]")
-
-        # Consume Scout item if it was used
-        if player.has_item(ItemType.SCOUT):
-            player.use_item(ItemType.SCOUT)
 
         return location
 
@@ -378,15 +356,26 @@ class GameEngine:
         for player in [p for p in self.players if p.alive]:
             chosen_location = player_choices[player]
 
-            # Roll individual points for this player FIRST (before catch check)
-            # Check if this player used Scout and has a cached roll
-            if player.id in self.scout_rolls and chosen_location.name in self.scout_rolls[player.id]:
-                base_roll = self.scout_rolls[player.id][chosen_location.name]
-            else:
-                base_roll = chosen_location.roll_points()
+            # Roll individual points for this player
+            base_roll = chosen_location.roll_points()
 
             # Apply event point modifiers
             location_points = self.event_manager.apply_point_modifier(chosen_location, base_roll)
+
+            # Apply High Roller passive effect
+            high_roller_effect = player.passive_manager.get_high_roller_effect(chosen_location.name)
+            high_roller_bust = False
+            if high_roller_effect:
+                if random.random() < high_roller_effect['bust_chance']:
+                    # BUST! Get 0 points instead
+                    high_roller_bust = True
+                    ui.console.print(f"\n[bold red]🎲 HIGH ROLLER BUST![/bold red] [{player.color}]{player.name}[/{player.color}] loses this round's loot!")
+                    location_points = 0
+                else:
+                    # Bonus points!
+                    bonus = int(location_points * high_roller_effect['point_bonus'])
+                    location_points += bonus
+                    ui.console.print(f"\n[bold green]🎲 HIGH ROLLER WIN![/bold green] [{player.color}]{player.name}[/{player.color}] gets +{bonus} bonus points!")
 
             # Check for event effects
             special_effect = self.event_manager.get_special_effect(chosen_location)
@@ -470,9 +459,6 @@ class GameEngine:
                     f"  [dim]{event.emoji} {event.name} at {event.affected_location.name}[/dim]"
                 )
             ui.console.print()
-
-        # Clear scout rolls for next round
-        self.scout_rolls.clear()
 
         # Store for next round display
         self.last_ai_search_location = search_location
@@ -616,8 +602,8 @@ class GameEngine:
                 else:
                     outcome = 'ai_win'  # Game ended but player didn't win
 
-                # Collect items used during game
-                items_used = [item.name for item in player.items]
+                # Collect passives used during game
+                passives_used = [p.name for p in player.get_passives()]
 
                 # Collect hiding stats from this game
                 hiding_data = {
@@ -625,7 +611,7 @@ class GameEngine:
                     'successful_hides': player.hiding_stats['successful_hides'],
                     'run_attempts': player.hiding_stats['total_run_attempts'],
                     'successful_runs': player.hiding_stats['successful_runs'],
-                    'favorite_hiding_spots': player.hiding_stats['favorite_hide_spots'],
+                    'favorite_escape_options': player.hiding_stats['favorite_escape_options'],
                     'total_caught_instances': len(player.hide_run_history)
                 }
 
@@ -650,7 +636,7 @@ class GameEngine:
                         'rounds_played': self.round_num,
                         'num_opponents': self.num_players - 1,
                         'locations_chosen': player.choice_history,
-                        'items_used': items_used,
+                        'passives_used': passives_used,
                         'hiding_data': hiding_data,
                         'escapes_in_game': escapes_in_game,
                         'high_threat_escape': high_threat_escape
@@ -744,6 +730,35 @@ class GameEngine:
             ai_prediction,
             location_points
         )
+
+        # Apply passive escape bonuses as "second chance" if AI predicted correctly
+        choice_type = chosen_option.get('type', 'hide')
+        if not result['escaped']:
+            # AI predicted correctly - but passives might save the player
+            if choice_type == 'hide':
+                bonus = player.passive_manager.get_hide_bonus()
+            else:  # run
+                bonus = player.passive_manager.get_run_bonus()
+
+            if bonus > 0:
+                # Roll for second chance escape
+                if random.random() < bonus:
+                    result['escaped'] = True
+                    result['passive_saved'] = True
+                    ui.console.print(f"\n[bold green]🎭 PASSIVE SAVE![/bold green] Your passive ability helped you escape!")
+
+                    # Calculate points for successful run with Quick Feet override
+                    if choice_type == 'run':
+                        retention = player.passive_manager.get_run_retention()
+                        if retention is None:
+                            retention = self.hiding_manager.get_run_point_retention()
+                        result['points_awarded'] = int(location_points * retention)
+
+        # Also apply Quick Feet retention bonus for successful runs (even without second chance)
+        if result['escaped'] and choice_type == 'run' and not result.get('passive_saved'):
+            retention = player.passive_manager.get_run_retention()
+            if retention is not None:
+                result['points_awarded'] = int(location_points * retention)
 
         # Add AI reasoning for display
         result['ai_confidence'] = ai_confidence

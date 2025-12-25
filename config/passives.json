@@ -1,0 +1,78 @@
+{
+  "passives": [
+    {
+      "id": "ai_whisperer",
+      "name": "AI Whisperer",
+      "cost": 15,
+      "description": "See detailed AI threat analysis and predictions",
+      "emoji": "🔮",
+      "category": "intel",
+      "effects": {
+        "intel_detail_level": "full"
+      }
+    },
+    {
+      "id": "inside_knowledge",
+      "name": "Inside Knowledge",
+      "cost": 10,
+      "description": "See point tier hints (Low/Med/High) before choosing",
+      "emoji": "📊",
+      "category": "intel",
+      "effects": {
+        "show_point_hints": true
+      }
+    },
+    {
+      "id": "escape_artist",
+      "name": "Escape Artist",
+      "cost": 12,
+      "description": "+15% to both hide and run success rates",
+      "emoji": "🎭",
+      "category": "escape",
+      "effects": {
+        "hide_bonus": 0.15,
+        "run_bonus": 0.15
+      }
+    },
+    {
+      "id": "shadow_walker",
+      "name": "Shadow Walker",
+      "cost": 10,
+      "description": "+20% to hiding success, -10% to running success",
+      "emoji": "🌑",
+      "category": "escape",
+      "effects": {
+        "hide_bonus": 0.20,
+        "run_bonus": -0.10
+      }
+    },
+    {
+      "id": "quick_feet",
+      "name": "Quick Feet",
+      "cost": 12,
+      "description": "+25% run success, keep 95% of points when running",
+      "emoji": "👟",
+      "category": "escape",
+      "effects": {
+        "run_bonus": 0.25,
+        "run_retention": 0.95
+      }
+    },
+    {
+      "id": "high_roller",
+      "name": "High Roller",
+      "cost": 8,
+      "description": "+15% points at Casino/Bank, but 20% chance to bust",
+      "emoji": "🎲",
+      "category": "risk",
+      "effects": {
+        "bonus_locations": ["Casino Vault", "Bank Heist"],
+        "point_bonus": 0.15,
+        "bust_chance": 0.20
+      }
+    }
+  ],
+  "settings": {
+    "default_intel_level": "simple"
+  }
+}

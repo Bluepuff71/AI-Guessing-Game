@@ -9,8 +9,8 @@ from rich.text import Text
 from typing import List, Dict, Any
 from game.player import Player
 from game.locations import Location, LocationManager
-from game.items import ItemShop, ItemType
-from game.animations import play_elimination_animation
+from game.passives import PassiveShop, PassiveType
+from game.animations import play_elimination_animation, play_victory_animation, play_escape_animation
 
 
 console = Console()
@@ -60,20 +60,21 @@ def print_standings(players: List[Player], player_choices: Dict[Player, Location
     table.add_column("Rank", style="cyan", width=6)
     table.add_column("Player", style="green")
     table.add_column("Points", justify="right", style="yellow")
-    table.add_column("Items", style="magenta")
+    table.add_column("Passives", style="magenta")
 
     # Add choice column if choices are being tracked
     if player_choices is not None:
         table.add_column("Location Choice", style="cyan")
 
     for i, player in enumerate(alive_players, 1):
-        items_str = ", ".join(item.name for item in player.get_active_items()) or "-"
+        passives = player.get_passives()
+        passives_str = ", ".join(p.emoji for p in passives) or "-"
 
         row = [
             f"{i}.",
             f"[{player.color}]{player.name}[/{player.color}]",
             str(player.points),
-            items_str
+            passives_str
         ]
 
         # Add choice info if tracking
@@ -91,8 +92,8 @@ def print_standings(players: List[Player], player_choices: Dict[Player, Location
     console.print()
 
 
-def print_locations(location_manager: LocationManager, previous_ai_location: Location = None, event_manager=None, scout_rolls: dict = None):
-    """Print available loot locations with active events and optional Scout preview."""
+def print_locations(location_manager: LocationManager, previous_ai_location: Location = None, event_manager=None, scout_rolls: dict = None, point_hints: dict = None):
+    """Print available loot locations with active events, optional Scout preview, and point hints."""
     console.print("[bold]AVAILABLE LOOT THIS ROUND:[/bold]")
 
     if previous_ai_location:
@@ -108,6 +109,11 @@ def print_locations(location_manager: LocationManager, previous_ai_location: Loc
             # Show Scout preview roll instead of range
             scout_roll = scout_rolls[loc.name]
             console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [bold yellow]📡 {scout_roll:>2} pts[/bold yellow] [dim](Scout preview!)[/dim]")
+        elif point_hints and loc.name in point_hints:
+            # Show Inside Knowledge hint
+            hint = point_hints[loc.name]
+            hint_color = "green" if hint == "Low" else "yellow" if hint == "Med" else "red"
+            console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{loc.get_range_str():>6} pts[/yellow] [{hint_color}]📊 {hint}[/{hint_color}]")
         else:
             console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{loc.get_range_str():>6} pts[/yellow]")
 
@@ -123,19 +129,26 @@ def print_locations(location_manager: LocationManager, previous_ai_location: Loc
     console.print()
 
 
-def print_shop_boxed():
-    """Print item shop in a bordered panel."""
-    from game.items import ItemShop, ItemType
-
-    ItemShop._load_items()
+def print_passive_shop(player: Player):
+    """Print passive abilities shop in a bordered panel."""
+    PassiveShop._load_passives()
 
     # Build shop content
     lines = []
-    for i, item_type in enumerate(ItemType, 1):
-        item = ItemShop.ITEMS[item_type]
-        lines.append(f"[bold cyan][{i}][/bold cyan] [yellow]{item.name}[/yellow] - [green]{item.cost} pts[/green]")
-        lines.append(f"    [dim]{item.description}[/dim]")
-        if i < len(ItemType):
+    for i, passive_type in enumerate(PassiveType, 1):
+        passive = PassiveShop.PASSIVES.get(passive_type)
+        if not passive:
+            continue
+
+        owned = player.has_passive(passive_type)
+
+        if owned:
+            lines.append(f"[bold cyan][{i}][/bold cyan] {passive.emoji} [dim strikethrough]{passive.name}[/dim strikethrough] [green]OWNED[/green]")
+        else:
+            lines.append(f"[bold cyan][{i}][/bold cyan] {passive.emoji} [yellow]{passive.name}[/yellow] - [green]{passive.cost} pts[/green]")
+            lines.append(f"    [dim]{passive.description}[/dim]")
+
+        if i < len(PassiveType):
             lines.append("")
 
     lines.append("")
@@ -143,17 +156,12 @@ def print_shop_boxed():
 
     panel = Panel(
         "\n".join(lines),
-        title="🛒 ITEM SHOP",
-        border_style="yellow",
+        title="✨ PASSIVE ABILITIES",
+        border_style="cyan",
         padding=(1, 2)
     )
 
     console.print(panel)
-
-
-def print_shop():
-    """Print item shop."""
-    print_shop_boxed()
     console.print()
 
 
@@ -173,59 +181,73 @@ def get_player_input(prompt: str, valid_range: range = None, color: str = "green
             return response
 
 
-def show_intel_report(player: Player, threat_level: float, predictability: float, insights: List[str], ai_memory=None):
-    """Show Intel Report for a player."""
+def show_intel_report(player: Player, threat_level: float, predictability: float, insights: List[str], ai_memory=None, detail_level: str = "simple"):
+    """Show Intel Report for a player with varying detail levels.
+
+    Args:
+        detail_level: "simple" shows basic labels only, "full" shows detailed percentages and analysis
+    """
     console.print()
     panel_content = []
 
-    # Threat level bar
-    bar_length = 10
-    filled = int(threat_level * bar_length)
-    bar = "█" * filled + "░" * (bar_length - filled)
     threat_label = "HIGH" if threat_level > 0.7 else "MODERATE" if threat_level > 0.4 else "LOW"
+    pred_label = "HIGH" if predictability > 0.6 else "MODERATE" if predictability > 0.3 else "LOW"
 
-    panel_content.append(f"⚠️  AI THREAT LEVEL: {bar} {threat_level:.0%} ({threat_label})")
-    panel_content.append("")
-    panel_content.append(f"Predictability Score: {predictability:.0%}")
-
-    if predictability > 0.6:
-        panel_content.append("The AI has identified patterns in your behavior.")
-    else:
-        panel_content.append("The AI is struggling to predict your moves.")
-
-    panel_content.append("")
-    panel_content.append("What the AI sees:")
-    for insight in insights:
-        panel_content.append(f"  • {insight}")
-
-    # Add AI Memory section if available
-    if ai_memory:
+    if detail_level == "simple":
+        # SIMPLIFIED VIEW (no AI Whisperer)
+        panel_content.append(f"⚠️  AI THREAT LEVEL: [bold]{threat_label}[/bold]")
         panel_content.append("")
-        panel_content.append("[bold cyan]🤖 AI MEMORY OF YOU:[/bold cyan]")
-        panel_content.append(f"  • Favorite Location: [yellow]{ai_memory['favorite_location']}[/yellow]")
-        panel_content.append(f"  • Risk Profile: [yellow]{ai_memory['risk_profile'].title()}[/yellow]")
-        panel_content.append(f"  • AI's Catch Rate vs You: [yellow]{ai_memory['catch_rate']:.0%}[/yellow]")
+        panel_content.append(f"Predictability: [bold]{pred_label}[/bold]")
+        panel_content.append("")
+        panel_content.append("[dim]Purchase 'AI Whisperer' passive for detailed analysis[/dim]")
+    else:
+        # FULL VIEW (AI Whisperer active)
+        bar_length = 10
+        filled = int(threat_level * bar_length)
+        bar = "█" * filled + "░" * (bar_length - filled)
 
-        if ai_memory['has_personal_model']:
-            panel_content.append(f"  • [red]⚠️  AI has built a PERSONAL MODEL of you![/red]")
-            panel_content.append(f"    [dim](Based on {ai_memory['total_games']} games)[/dim]")
-        elif ai_memory['total_games'] >= 5:
-            panel_content.append(f"  • [yellow]AI is training a personal model...[/yellow]")
+        panel_content.append(f"⚠️  AI THREAT LEVEL: {bar} {threat_level:.0%} ({threat_label})")
+        panel_content.append("")
+        panel_content.append(f"Predictability Score: {predictability:.0%}")
+
+        if predictability > 0.6:
+            panel_content.append("The AI has identified patterns in your behavior.")
         else:
-            panel_content.append(f"  • [dim]AI needs {5 - ai_memory['total_games']} more games to build a personal model[/dim]")
+            panel_content.append("The AI is struggling to predict your moves.")
 
-        # Add hiding stats if player has been caught
-        hiding_stats = ai_memory.get('hiding_stats', {})
-        if hiding_stats.get('total_caught', 0) > 0:
+        panel_content.append("")
+        panel_content.append("What the AI sees:")
+        for insight in insights:
+            panel_content.append(f"  • {insight}")
+
+        # Add AI Memory section if available
+        if ai_memory:
             panel_content.append("")
-            panel_content.append("[bold yellow]🫣 ESCAPE PATTERNS:[/bold yellow]")
-            panel_content.append(f"  • Times Caught: [yellow]{hiding_stats['total_caught']}[/yellow]")
-            total_attempts = hiding_stats['hide_attempts'] + hiding_stats['run_attempts']
-            if total_attempts > 0:
-                panel_content.append(f"  • Escape Attempts: [yellow]{total_attempts}[/yellow]")
-                panel_content.append(f"    - Hide: {hiding_stats['hide_attempts']} ({hiding_stats['hide_success_rate']:.0%} success)")
-                panel_content.append(f"    - Run: {hiding_stats['run_attempts']} ({hiding_stats['run_success_rate']:.0%} success)")
-                panel_content.append(f"  • Strategy: [yellow]{hiding_stats['risk_profile_when_caught'].replace('_', ' ').title()}[/yellow]")
+            panel_content.append("[bold cyan]🤖 AI MEMORY OF YOU:[/bold cyan]")
+            panel_content.append(f"  • Favorite Location: [yellow]{ai_memory['favorite_location']}[/yellow]")
+            panel_content.append(f"  • Risk Profile: [yellow]{ai_memory['risk_profile'].title()}[/yellow]")
+            panel_content.append(f"  • AI's Catch Rate vs You: [yellow]{ai_memory['catch_rate']:.0%}[/yellow]")
+
+            if ai_memory['has_personal_model']:
+                panel_content.append(f"  • [red]⚠️  AI has built a PERSONAL MODEL of you![/red]")
+                panel_content.append(f"    [dim](Based on {ai_memory['total_games']} games)[/dim]")
+            elif ai_memory['total_games'] >= 5:
+                panel_content.append(f"  • [yellow]AI is training a personal model...[/yellow]")
+            else:
+                panel_content.append(f"  • [dim]AI needs {5 - ai_memory['total_games']} more games to build a personal model[/dim]")
+
+            # Add hiding stats if player has been caught
+            hiding_stats = ai_memory.get('hiding_stats', {})
+            if hiding_stats.get('total_caught', 0) > 0:
+                panel_content.append("")
+                panel_content.append("[bold yellow]🫣 ESCAPE PATTERNS:[/bold yellow]")
+                panel_content.append(f"  • Times Caught: [yellow]{hiding_stats['total_caught']}[/yellow]")
+                total_attempts = hiding_stats['hide_attempts'] + hiding_stats['run_attempts']
+                if total_attempts > 0:
+                    panel_content.append(f"  • Escape Attempts: [yellow]{total_attempts}[/yellow]")
+                    panel_content.append(f"    - Hide: {hiding_stats['hide_attempts']} ({hiding_stats['hide_success_rate']:.0%} success)")
+                    panel_content.append(f"    - Run: {hiding_stats['run_attempts']} ({hiding_stats['run_success_rate']:.0%} success)")
+                    panel_content.append(f"  • Strategy: [yellow]{hiding_stats['risk_profile_when_caught'].replace('_', ' ').title()}[/yellow]")
 
     console.print(Panel("\n".join(panel_content), title="📊 INTEL REPORT", border_style="cyan"))
     console.print()
@@ -303,6 +325,7 @@ def print_player_looted(player: Player, location: Location, points_earned: int):
 
 def print_game_over(winner: Player):
     """Print game over message."""
+    play_victory_animation()
     console.print()
     console.print("[bold green]" + "=" * 50 + "[/bold green]")
     console.print(f"[bold green]🎉 [{winner.color}]{winner.name}[/{winner.color}] WINS with {winner.points} points! 🎉[/bold green]")
@@ -663,6 +686,7 @@ def print_escape_result(player, result: dict, escape_options: list = None):
 
     if result['escaped']:
         # SUCCESS - Player outsmarted the AI
+        play_escape_animation()
         console.print("[bold green]" + "=" * 50 + "[/bold green]")
         console.print(f"[bold green]    OUTSMARTED! [{player.color}]{player.name}[/{player.color}] escapes![/bold green]")
         console.print("[bold green]" + "=" * 50 + "[/bold green]")

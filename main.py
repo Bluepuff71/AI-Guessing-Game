@@ -17,7 +17,7 @@ import shutil
 from game.engine import GameEngine
 from game import ui
 from game.profile_manager import ProfileManager, PlayerProfile
-from game.animations import play_elimination_animation
+from game.animations import play_elimination_animation, play_victory_animation, play_escape_animation
 from typing import List, Optional
 
 # Global state for selected profiles
@@ -255,16 +255,37 @@ def start_game():
 
 def test_animations():
     """Test animation sequences."""
-    ui.clear()
-    ui.console.print("\n[bold cyan]ANIMATION TEST[/bold cyan]\n")
-    ui.console.print("Playing elimination animation...\n")
-    ui.console.input("[dim]Press Enter to start...[/dim]")
+    while True:
+        ui.clear()
+        ui.console.print("\n[bold cyan]ANIMATION TEST[/bold cyan]\n")
+        ui.console.print("[1] Elimination (player dies)")
+        ui.console.print("[2] Victory (player wins)")
+        ui.console.print("[3] Escape (player outsmarts AI)")
+        ui.console.print("[4] Play all")
+        ui.console.print("[Q] Back to menu")
+        ui.console.print()
 
-    play_elimination_animation()
+        choice = ui.console.input("[bold green]Select:[/bold green] ").strip().upper()
 
-    ui.clear()
-    ui.console.print("\n[green]Animation test complete![/green]")
-    ui.console.input("\n[dim]Press Enter to return to menu...[/dim]")
+        if choice == 'Q':
+            return
+        elif choice == '1':
+            ui.console.print("\nPlaying elimination animation...")
+            play_elimination_animation()
+        elif choice == '2':
+            ui.console.print("\nPlaying victory animation...")
+            play_victory_animation()
+        elif choice == '3':
+            ui.console.print("\nPlaying escape animation...")
+            play_escape_animation()
+        elif choice == '4':
+            ui.console.print("\nPlaying all animations...")
+            play_elimination_animation()
+            play_victory_animation()
+            play_escape_animation()
+        else:
+            ui.console.print("[red]Invalid choice[/red]")
+            ui.console.input("[dim]Press Enter...[/dim]")
 
 
 def check_and_migrate_legacy_games():
