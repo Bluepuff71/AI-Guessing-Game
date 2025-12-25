@@ -89,7 +89,7 @@ class TestEscapeResolution:
         )
 
         assert result['escaped'] is True
-        assert result['points_awarded'] == 0  # Hide gives 0 points
+        assert result['points_awarded'] == 16  # 80% of 20 points
         assert result['player_choice_id'] == 'store_stockroom'
         assert result['ai_prediction_id'] == 'store_freezer'
         assert result['choice_type'] == 'hide'
@@ -153,8 +153,8 @@ class TestEscapeResolution:
         )
         assert result['points_awarded'] == 20  # 80% of 25 = 20
 
-    def test_resolve_escape_hide_zero_points(self, sample_hiding_manager):
-        """Test hiding always gives 0 points even when escaped."""
+    def test_resolve_escape_hide_points(self, sample_hiding_manager):
+        """Test hiding gives 80% points when escaped (same as running)."""
         player_choice = {
             'id': 'store_stockroom',
             'name': 'Behind Boxes',
@@ -168,7 +168,7 @@ class TestEscapeResolution:
         )
 
         assert result['escaped'] is True
-        assert result['points_awarded'] == 0  # Hide gives 0 points
+        assert result['points_awarded'] == 80  # 80% of 100 points
 
     def test_resolve_escape_includes_location_points(self, sample_hiding_manager):
         """Test result includes original location points."""
