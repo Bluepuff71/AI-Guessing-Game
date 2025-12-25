@@ -14,9 +14,9 @@ class Event:
     emoji: str
     duration_rounds: int  # 1 or 2
 
-    # Effect modifiers (config-based or callable for backward compatibility)
-    point_modifier: Optional[Any] = None  # Dict config or Callable[[int], int]
-    risk_modifier: Optional[Any] = None  # Dict config or Callable[[float], float]
+    # Effect modifiers (config-based)
+    point_modifier: Optional[Dict[str, Any]] = None  # {"type": "multiply"|"add", "value": number}
+    risk_modifier: Optional[Dict[str, Any]] = None  # {"type": "multiply"|"multiply_capped", "value": number}
     special_effect: Optional[str] = None  # Special mechanics: "immunity", "guaranteed_catch"
 
     # State tracking (set when event is spawned)
@@ -50,18 +50,12 @@ class Event:
             Modified points value
 
         Supports:
-            - Dict config: {"type": "multiply", "value": 2.0}
-            - Dict config: {"type": "add", "value": 20}
-            - Callable (legacy): lambda pts: pts * 2
+            - {"type": "multiply", "value": 2.0}
+            - {"type": "add", "value": 20}
         """
         if self.point_modifier is None:
             return points
 
-        # Legacy callable support
-        if callable(self.point_modifier):
-            return self.point_modifier(points)
-
-        # Config-based modifier
         if isinstance(self.point_modifier, dict):
             modifier_type = self.point_modifier.get('type')
             value = self.point_modifier.get('value', 1.0)
@@ -86,18 +80,12 @@ class Event:
             Modified probability value
 
         Supports:
-            - Dict config: {"type": "multiply", "value": 0.5}
-            - Dict config: {"type": "multiply_capped", "value": 2.5, "cap": 0.95}
-            - Callable (legacy): lambda p: p * 0.5
+            - {"type": "multiply", "value": 0.5}
+            - {"type": "multiply_capped", "value": 2.5, "cap": 0.95}
         """
         if self.risk_modifier is None:
             return probability
 
-        # Legacy callable support
-        if callable(self.risk_modifier):
-            return self.risk_modifier(probability)
-
-        # Config-based modifier
         if isinstance(self.risk_modifier, dict):
             modifier_type = self.risk_modifier.get('type')
             value = self.risk_modifier.get('value', 1.0)

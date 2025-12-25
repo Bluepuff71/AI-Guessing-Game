@@ -111,9 +111,6 @@ class PlayerProfile:
     @staticmethod
     def from_dict(data: dict) -> 'PlayerProfile':
         """Create PlayerProfile from dictionary."""
-        # Remove deprecated/unknown fields
-        data.pop('achievements', None)  # Achievements feature was removed
-
         # Convert nested dataclasses
         if 'stats' in data and isinstance(data['stats'], dict):
             data['stats'] = ProfileStats(**data['stats'])
@@ -122,22 +119,7 @@ class PlayerProfile:
             data['behavioral_stats'] = BehavioralStats(**data['behavioral_stats'])
 
         if 'hiding_stats' in data and isinstance(data['hiding_stats'], dict):
-            hiding_data = data['hiding_stats']
-            # Backward compatibility: migrate old field names to new ones
-            if 'favorite_hiding_spots' in hiding_data:
-                hiding_data['favorite_escape_options'] = hiding_data.pop('favorite_hiding_spots')
-            if 'ai_detection_rate_by_spot' in hiding_data:
-                hiding_data.pop('ai_detection_rate_by_spot')  # Remove deprecated field
-            # Add default values for new fields that may be missing
-            hiding_data.setdefault('total_escapes', 0)
-            hiding_data.setdefault('favorite_escape_options', {})
-            hiding_data.setdefault('escape_option_history', [])
-            hiding_data.setdefault('ai_prediction_accuracy', 0.0)
-            hiding_data.setdefault('ai_correct_predictions', 0)
-            data['hiding_stats'] = HidingBehavioralStats(**hiding_data)
-        elif 'hiding_stats' not in data:
-            # Backward compatibility for old profiles without hiding stats
-            data['hiding_stats'] = HidingBehavioralStats()
+            data['hiding_stats'] = HidingBehavioralStats(**data['hiding_stats'])
 
         if 'ai_memory' in data and isinstance(data['ai_memory'], dict):
             data['ai_memory'] = AIMemoryStats(**data['ai_memory'])
@@ -398,7 +380,6 @@ class ProfileManager:
         hiding_data = game_data.get('hiding_data', {})
 
         if not hiding_data:
-            # No hiding data in this game (backward compatibility)
             return
 
         # Update totals
@@ -509,117 +490,3 @@ class ProfileManager:
             return "aggressive"
         else:
             return "conservative"
-
-    def migrate_legacy_games(self) -> Dict[str, Any]:
-        """
-        Migrate existing game_history.json to profile system.
-
-        Creates profiles from unique player names and links historical games.
-
-        Returns:
-            Dict with migration statistics
-        """
-        history_file = os.path.join(self._profiles_dir.replace('/profiles', ''), 'game_history.json')
-
-        if not os.path.exists(history_file):
-            return {'error': 'No game_history.json found', 'profiles_created': 0, 'games_migrated': 0}
-
-        try:
-            with open(history_file, 'r', encoding='utf-8') as f:
-                history_data = json.load(f)
-        except Exception as e:
-            return {'error': f'Failed to load game_history.json: {e}', 'profiles_created': 0, 'games_migrated': 0}
-
-        games = history_data.get('games', [])
-
-        # Step 1: Extract unique player names
-        player_names = set()
-        for game in games:
-            for player_data in game.get('players', []):
-                player_names.add(player_data['name'])
-
-        # Step 2: Create profiles for each unique name (or load if exists)
-        name_to_profile = {}
-        profiles_created = 0
-
-        for name in player_names:
-            # Check if profile already exists by name
-            existing_profiles = self.list_all_profiles()
-            existing = next((p for p in existing_profiles if p.name == name), None)
-
-            if existing:
-                profile = self.load_profile(existing.profile_id)
-                name_to_profile[name] = profile
-            else:
-                profile = self.create_profile(name)
-                name_to_profile[name] = profile
-                profiles_created += 1
-
-        # Step 3: Migrate games and update profiles
-        games_migrated = 0
-
-        for game in games:
-            # Add game_id and timestamp if missing
-            if 'game_id' not in game:
-                game['game_id'] = str(uuid.uuid4())
-            if 'timestamp' not in game:
-                # Use a default historical date
-                game['timestamp'] = datetime(2025, 12, 1, tzinfo=timezone.utc).isoformat()
-            if 'winner_profile_id' not in game:
-                winner_name = game.get('winner')
-                if winner_name and winner_name in name_to_profile:
-                    game['winner_profile_id'] = name_to_profile[winner_name].profile_id
-                else:
-                    game['winner_profile_id'] = None
-
-            # Add profile_id to each player and update their profile
-            for player_data in game.get('players', []):
-                player_name = player_data['name']
-
-                if player_name not in name_to_profile:
-                    continue
-
-                profile = name_to_profile[player_name]
-
-                # Add profile_id to player data
-                if 'profile_id' not in player_data:
-                    player_data['profile_id'] = profile.profile_id
-
-                # Update profile stats from this game
-                outcome = 'win' if game.get('winner') == player_name else 'loss'
-                caught = not player_data.get('alive', True)
-
-                game_data = {
-                    'game_id': game['game_id'],
-                    'outcome': outcome,
-                    'final_score': player_data.get('final_points', 0),
-                    'rounds_played': player_data.get('rounds_survived', 0),
-                    'caught': caught,
-                    'num_opponents': game.get('num_players', 2) - 1,
-                    'locations_chosen': player_data.get('choice_history', []),
-                    'items_used': []  # Legacy games don't track items
-                }
-
-                # Update profile (without triggering model training)
-                self.update_stats_after_game(profile.profile_id, game_data)
-
-            games_migrated += 1
-
-        # Step 4: Save updated game_history.json
-        try:
-            with open(history_file, 'w', encoding='utf-8') as f:
-                json.dump(history_data, f, indent=2)
-        except Exception as e:
-            return {
-                'error': f'Failed to save migrated game_history.json: {e}',
-                'profiles_created': profiles_created,
-                'games_migrated': games_migrated
-            }
-
-        return {
-            'success': True,
-            'profiles_created': profiles_created,
-            'total_profiles': len(name_to_profile),
-            'games_migrated': games_migrated,
-            'player_names': list(player_names)
-        }

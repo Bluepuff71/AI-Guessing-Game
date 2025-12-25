@@ -1001,20 +1001,6 @@ class TestLocationPreferencesEdgeCases:
         assert preferences == {}
 
 
-class TestMigrateLegacyGames:
-    """Tests for migrate_legacy_games method."""
-
-    def test_migrate_no_history_file(self, temp_profile_dir):
-        """Test migration when no game_history.json exists."""
-        pm = ProfileManager()
-
-        result = pm.migrate_legacy_games()
-
-        assert 'error' in result
-        assert result['profiles_created'] == 0
-        assert result['games_migrated'] == 0
-
-
 class TestTrainPlayerModel:
     """Tests for _train_player_model method."""
 

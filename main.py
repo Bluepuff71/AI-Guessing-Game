@@ -77,6 +77,14 @@ def show_main_menu():
 
 def reset_ai_data():
     """Reset AI training data."""
+    global selected_profiles
+    import stat
+
+    def handle_remove_readonly(func, path, excinfo):
+        """Error handler for shutil.rmtree to handle read-only and locked files on Windows."""
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+
     data_dir = "data"
 
     if not os.path.exists(data_dir):
@@ -85,17 +93,26 @@ def reset_ai_data():
         return
 
     ui.console.print("\n[bold red]⚠️  WARNING: This will delete all AI training data![/bold red]")
+    ui.console.print("[bold red]This includes all player profiles and AI models![/bold red]")
     ui.console.print("The AI will start learning from scratch.\n")
 
     confirm = ui.console.input("[yellow]Are you sure? (yes/no):[/yellow] ").strip().lower()
 
     if confirm == 'yes':
         try:
-            # Delete the data directory
-            shutil.rmtree(data_dir)
+            # Clear selected profiles first (they reference data being deleted)
+            selected_profiles = []
+
+            # Reset the ProfileManager singleton so it reinitializes after reset
+            ProfileManager._instance = None
+
+            # Delete the data directory with error handler for Windows permission issues
+            shutil.rmtree(data_dir, onerror=handle_remove_readonly)
             ui.console.print("[green]✓ AI training data has been reset![/green]")
+            ui.console.print("[dim]All profiles and AI models have been deleted.[/dim]")
         except Exception as e:
             ui.console.print(f"[red]Error resetting data: {e}[/red]")
+            ui.console.print("[yellow]Tip: Close the game and try again, or manually delete the 'data' folder.[/yellow]")
     else:
         ui.console.print("[dim]Reset cancelled.[/dim]")
 
@@ -288,81 +305,8 @@ def test_animations():
             ui.console.input("[dim]Press Enter...[/dim]")
 
 
-def check_and_migrate_legacy_games():
-    """Check if legacy games need migration and offer to migrate."""
-    pm = ProfileManager()
-
-    # Check if profiles exist
-    profiles = pm.list_all_profiles()
-
-    # Check if game_history.json exists with games
-    history_file = os.path.join("data", "game_history.json")
-    if not os.path.exists(history_file):
-        return  # No legacy games to migrate
-
-    try:
-        import json
-        with open(history_file, 'r', encoding='utf-8') as f:
-            history_data = json.load(f)
-            games = history_data.get('games', [])
-
-        if not games:
-            return  # No games to migrate
-
-        # Check if any game is already migrated (has profile_id)
-        already_migrated = any(
-            'profile_id' in player
-            for game in games
-            for player in game.get('players', [])
-        )
-
-        if already_migrated:
-            return  # Already migrated
-
-        # Offer migration
-        ui.clear()
-        ui.console.print("\n[bold cyan]╔═══════════════════════════════════════╗[/bold cyan]")
-        ui.console.print("[bold cyan]║      LEGACY GAME DATA DETECTED        ║[/bold cyan]")
-        ui.console.print("[bold cyan]╚═══════════════════════════════════════╝[/bold cyan]\n")
-
-        ui.console.print(f"[yellow]Found {len(games)} historical games in game_history.json[/yellow]")
-        ui.console.print("\nWould you like to migrate this data to the new profile system?")
-        ui.console.print("This will:")
-        ui.console.print("  • Create profiles for all unique player names")
-        ui.console.print("  • Link historical games to profiles")
-        ui.console.print("  • Update player statistics")
-        ui.console.print("  • Preserve all game data")
-        ui.console.print()
-
-        confirm = ui.console.input("[bold green]Migrate now? (yes/no):[/bold green] ").strip().lower()
-
-        if confirm == 'yes':
-            ui.console.print("\n[cyan]Migrating legacy games...[/cyan]")
-            result = pm.migrate_legacy_games()
-
-            if result.get('success'):
-                ui.console.print(f"\n[green]✓ Migration completed successfully![/green]")
-                ui.console.print(f"  • Profiles created: {result['profiles_created']}")
-                ui.console.print(f"  • Total profiles: {result['total_profiles']}")
-                ui.console.print(f"  • Games migrated: {result['games_migrated']}")
-                ui.console.print(f"\n[dim]Players: {', '.join(result['player_names'])}[/dim]")
-            else:
-                ui.console.print(f"\n[red]✗ Migration failed: {result.get('error', 'Unknown error')}[/red]")
-
-            ui.console.input("\n[dim]Press Enter to continue...[/dim]")
-        else:
-            ui.console.print("[dim]Migration cancelled. You can migrate later from the Profile menu.[/dim]")
-            ui.console.input("\n[dim]Press Enter to continue...[/dim]")
-
-    except Exception as e:
-        ui.console.print(f"[red]Error checking for legacy games: {e}[/red]")
-
-
 def main():
     """Main entry point for LOOT RUN."""
-    # Check for legacy games on first run
-    check_and_migrate_legacy_games()
-
     while True:
         choice = show_main_menu()
 

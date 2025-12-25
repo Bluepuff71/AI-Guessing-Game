@@ -58,32 +58,23 @@ class GameEngine:
             ui.console.print("[yellow]🤖 AI Status: Baseline AI (No ML model yet - will train after 2+ games)[/yellow]")
         ui.console.print()
 
-        # Create players from profiles or prompt for names if no profiles
-        if self.profiles and len(self.profiles) == self.num_players:
-            # Use profiles
-            for i in range(self.num_players):
-                profile = self.profiles[i]
-                if profile:
-                    # Player with profile
-                    self.players.append(Player(i, profile.name, profile.profile_id))
-                    # Get color for this player
-                    from game.player import PLAYER_COLORS
-                    player_color = PLAYER_COLORS[i % len(PLAYER_COLORS)]
-                    ui.console.print(f"[{player_color}]Player {i+1}: {profile.name}[/{player_color}] "
-                                   f"[dim]({profile.stats.wins}W-{profile.stats.losses}L)[/dim]")
-                else:
-                    # Guest player - need to ask for name
-                    name = ui.console.input(f"[bold green]Enter name for Guest Player {i+1}:[/bold green] ").strip()
-                    if not name:
-                        name = f"Player {i+1}"
-                    self.players.append(Player(i, name, None))
-        else:
-            # No profiles provided - prompt for names (legacy mode)
-            for i in range(self.num_players):
-                name = ui.console.input(f"[bold green]Enter name for Player {i+1}:[/bold green] ").strip()
+        # Create players from profiles
+        for i in range(self.num_players):
+            profile = self.profiles[i] if self.profiles else None
+            if profile:
+                # Player with profile
+                self.players.append(Player(i, profile.name, profile.profile_id))
+                # Get color for this player
+                from game.player import PLAYER_COLORS
+                player_color = PLAYER_COLORS[i % len(PLAYER_COLORS)]
+                ui.console.print(f"[{player_color}]Player {i+1}: {profile.name}[/{player_color}] "
+                               f"[dim]({profile.stats.wins}W-{profile.stats.losses}L)[/dim]")
+            else:
+                # Guest player - need to ask for name
+                name = ui.console.input(f"[bold green]Enter name for Guest Player {i+1}:[/bold green] ").strip()
                 if not name:
                     name = f"Player {i+1}"
-                self.players.append(Player(i, name))
+                self.players.append(Player(i, name, None))
 
         ui.console.print()
         ui.console.input("[dim]Press Enter to start the game...[/dim]")
