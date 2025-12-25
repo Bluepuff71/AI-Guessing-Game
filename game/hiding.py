@@ -64,7 +64,7 @@ class HidingManager:
         Resolve an escape attempt based on prediction matching.
 
         The player escapes if their choice differs from the AI's prediction.
-        Running escapes retain 80% of location points; hiding escapes get 0 points.
+        Both hiding and running escapes retain 80% of location points.
 
         Args:
             player_choice: The escape option dict the player selected
@@ -74,7 +74,7 @@ class HidingManager:
         Returns:
             Dict with:
                 - escaped: bool - True if player outsmarted the AI
-                - points_awarded: int - Points player keeps (0 for hide, 80% for run)
+                - points_awarded: int - Points player keeps (80% on successful escape)
                 - player_choice_id: str - What player chose
                 - ai_prediction_id: str - What AI predicted
                 - choice_type: str - 'hide' or 'run'
@@ -86,13 +86,11 @@ class HidingManager:
         # Core mechanic: Did the player outsmart the AI?
         escaped = (player_option_id != ai_prediction)
 
-        # Calculate points based on option type and outcome
+        # Calculate points based on outcome (hiding and running both retain points)
         points_awarded = 0
         if escaped:
-            if choice_type == 'run':
-                retention = self.get_run_point_retention()
-                points_awarded = int(location_points * retention)
-            # else: hiding gives 0 points (survival only)
+            retention = self.get_run_point_retention()
+            points_awarded = int(location_points * retention)
 
         return {
             'escaped': escaped,
