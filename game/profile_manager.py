@@ -92,7 +92,7 @@ class MatchHistoryEntry:
 
 @dataclass
 class PlayerProfile:
-    """Complete player profile with stats, history, and achievements."""
+    """Complete player profile with stats and history."""
     profile_id: str
     name: str
     created_date: str
@@ -102,7 +102,6 @@ class PlayerProfile:
     hiding_stats: HidingBehavioralStats = field(default_factory=HidingBehavioralStats)
     ai_memory: AIMemoryStats = field(default_factory=AIMemoryStats)
     match_history: List[MatchHistoryEntry] = field(default_factory=list)
-    achievements: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         """Convert profile to dictionary for JSON serialization."""
@@ -267,15 +266,11 @@ class ProfileManager:
         profiles.sort(key=lambda p: p.last_played, reverse=True)
         return profiles
 
-    def update_stats_after_game(self, profile_id: str, game_data: Dict[str, Any]) -> List:
-        """Update profile stats after a game completes and check for achievements.
-
-        Returns:
-            List of newly unlocked Achievement objects
-        """
+    def update_stats_after_game(self, profile_id: str, game_data: Dict[str, Any]) -> None:
+        """Update profile stats after a game completes."""
         profile = self.load_profile(profile_id)
         if not profile:
-            return []
+            return
 
         # Update basic stats
         profile.stats.total_games += 1
@@ -324,14 +319,6 @@ class ProfileManager:
         # Update last played
         profile.last_played = datetime.now(timezone.utc).isoformat()
 
-        # Check for newly unlocked achievements
-        from game.achievements import AchievementTracker
-        newly_unlocked = AchievementTracker.check_achievements(profile)
-
-        # Unlock achievements
-        for achievement in newly_unlocked:
-            AchievementTracker.unlock_achievement(profile, achievement)
-
         # Save updated profile
         self.save_profile(profile)
         self._update_index()
@@ -339,8 +326,6 @@ class ProfileManager:
         # Train per-player model at milestones (5, 10, 15, 20 games)
         if profile.stats.total_games in [5, 10, 15, 20]:
             self._train_player_model(profile_id)
-
-        return newly_unlocked
 
     def _train_player_model(self, profile_id: str) -> None:
         """Train a per-player AI model for this profile."""

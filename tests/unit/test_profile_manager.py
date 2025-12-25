@@ -135,8 +135,7 @@ class TestPlayerProfile:
             'ai_memory': {'times_predicted': 0, 'times_caught_by_ai': 0,
                          'catch_rate': 0.0, 'prediction_accuracy': 0,
                          'has_personal_model': False, 'model_trained_date': None},
-            'match_history': [],
-            'achievements': {}
+            'match_history': []
         }
 
         profile = PlayerProfile.from_dict(data)

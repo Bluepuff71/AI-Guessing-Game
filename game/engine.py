@@ -615,18 +615,8 @@ class GameEngine:
                     'total_caught_instances': len(player.hide_run_history)
                 }
 
-                # Calculate achievement-related stats
-                escapes_in_game = sum(
-                    1 for attempt in player.hide_run_history
-                    if attempt.get('escaped', False)
-                )
-                high_threat_escape = any(
-                    attempt.get('escaped', False) and attempt.get('ai_threat_level', 0) >= 0.9
-                    for attempt in player.hide_run_history
-                )
-
-                # Update profile stats and check for achievements
-                newly_unlocked = pm.update_stats_after_game(
+                # Update profile stats
+                pm.update_stats_after_game(
                     player.profile_id,
                     {
                         'game_id': game_id,
@@ -637,17 +627,11 @@ class GameEngine:
                         'num_opponents': self.num_players - 1,
                         'locations_chosen': player.choice_history,
                         'passives_used': passives_used,
-                        'hiding_data': hiding_data,
-                        'escapes_in_game': escapes_in_game,
-                        'high_threat_escape': high_threat_escape
+                        'hiding_data': hiding_data
                     }
                 )
 
                 ui.console.print(f"[dim]Updated profile for {player.name}[/dim]")
-
-                # Display achievement notifications
-                for achievement in newly_unlocked:
-                    ui.print_achievement_notification(achievement.name, achievement.description)
 
             except Exception as e:
                 ui.console.print(f"[dim red]Failed to update profile for {player.name}: {e}[/dim red]")

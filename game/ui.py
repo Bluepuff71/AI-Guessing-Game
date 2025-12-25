@@ -489,23 +489,6 @@ def print_profile_stats_summary(profile):
         console.print(f"  AI's catch rate vs you: {profile.ai_memory.catch_rate * 100:.1f}%")
         console.print()
 
-    # Achievements
-    if profile.achievements:
-        from game.achievements import AchievementTracker
-
-        progress = AchievementTracker.get_achievement_progress(profile)
-        console.print(f"[bold cyan]Achievements ({progress['unlocked']}/{progress['total']}):[/bold cyan]")
-
-        unlocked_achievements = AchievementTracker.get_unlocked_achievements(profile)
-        # Show last 5 achievements
-        for ach in unlocked_achievements[:5]:
-            console.print(f"  {ach['emoji']} [yellow]{ach['name']}[/yellow] - [dim]{ach['description']}[/dim]")
-
-        if len(unlocked_achievements) > 5:
-            console.print(f"  [dim]...and {len(unlocked_achievements) - 5} more[/dim]")
-
-        console.print()
-
     # Recent matches
     if profile.match_history:
         console.print("[bold cyan]Recent Matches:[/bold cyan]")
@@ -521,20 +504,6 @@ def print_profile_stats_summary(profile):
 
     console.print("[dim]Press Enter to continue...[/dim]")
     console.input()
-
-
-def print_achievement_notification(achievement_name: str, achievement_desc: str):
-    """Print achievement unlock notification."""
-    console.print()
-    panel = Panel(
-        f"[bold yellow]🏆 ACHIEVEMENT UNLOCKED! 🏆[/bold yellow]\n\n"
-        f"[bold cyan]{achievement_name}[/bold cyan]\n"
-        f"[dim]{achievement_desc}[/dim]",
-        border_style="yellow",
-        expand=False
-    )
-    console.print(panel)
-    console.print()
 
 
 def get_profile_selection(max_number: int) -> str:

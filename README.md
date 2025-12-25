@@ -2,6 +2,21 @@
 
 A strategic text-based party game where players compete to reach 100 points by looting locations, while an adaptive AI learns their patterns and hunts them down.
 
+## Quick Start
+
+```bash
+pip install rich lightgbm scikit-learn numpy
+python main.py
+```
+
+**Objective:** Reach 100 points or be the last player standing.
+
+**Each round:** Buy items (optional) → Choose a location to loot → AI searches one location → Caught = eliminated, safe = collect points.
+
+**Key tip:** The AI learns your patterns. Be unpredictable!
+
+---
+
 ## Game Overview
 
 **Objective:** Be the first to reach 100 points, or be the last player standing.
