@@ -209,9 +209,21 @@ class AIPredictor:
             # No history - fill with zeros (8 history features)
             features.extend([0.0] * 8)
 
-        # Items
-        num_items = len(player.get_active_items())
-        features.append(float(num_items))
+        # Passives (replaces old items system)
+        passives = player.get_passives()
+        features.append(float(len(passives)))
+
+        # Add passive-specific features for better prediction
+        from game.passives import PassiveType
+        has_high_roller = player.has_passive(PassiveType.HIGH_ROLLER)
+        has_escape_artist = player.has_passive(PassiveType.ESCAPE_ARTIST)
+        has_shadow_walker = player.has_passive(PassiveType.SHADOW_WALKER)
+        has_quick_feet = player.has_passive(PassiveType.QUICK_FEET)
+
+        features.append(1.0 if has_high_roller else 0.0)
+        features.append(1.0 if has_escape_artist else 0.0)
+        features.append(1.0 if has_shadow_walker else 0.0)
+        features.append(1.0 if has_quick_feet else 0.0)
 
         # Event features (optional - for newly trained models)
         # Note: Old models trained without these features will still work
@@ -413,9 +425,21 @@ class AIPredictor:
         elif features['risk_trend'] < 0 and location_value < 15:
             score += 3  # Decreasing risk
 
-        # Factor 5: (removed Lucky Charm - item no longer exists)
+        # Factor 5: High Roller passive - players are drawn to bonus locations
+        from game.passives import PassiveType
+        if player.has_passive(PassiveType.HIGH_ROLLER):
+            # High Roller gets bonuses at Casino Vault and Bank Heist
+            high_roller_locations = ["Casino Vault", "Bank Heist"]
+            if location.name in high_roller_locations:
+                score += 6  # Strong preference for bonus locations
 
-        # Factor 6: Avoid recently searched locations (slight penalty)
+        # Factor 6: Inside Knowledge - players may favor high-value locations
+        # since they can see point hints before choosing
+        if player.has_passive(PassiveType.INSIDE_KNOWLEDGE):
+            if location_value >= 15:
+                score += 2  # Slight boost - they know where good points are
+
+        # Factor 7: Avoid recently searched locations (slight penalty)
         # TODO: Track AI's recent searches and penalize
 
         return max(0, score)
@@ -655,7 +679,23 @@ class AIPredictor:
 
         total_threat = min(1.0, points_threat + catch_likelihood)
 
-        return total_threat
+        # Adjust threat based on escape passives
+        from game.passives import PassiveType
+
+        # Escape Artist makes player harder to catch - reduce threat slightly
+        if player.has_passive(PassiveType.ESCAPE_ARTIST):
+            total_threat *= 0.85  # 15% reduction - harder to eliminate
+
+        # Quick Feet makes player more dangerous - they keep 95% of points when running
+        if player.has_passive(PassiveType.QUICK_FEET):
+            total_threat *= 1.15  # 15% increase - even if caught, they escape with points
+
+        # Shadow Walker with hiding expertise is slightly less threatening
+        # (easier to predict they'll hide)
+        if player.has_passive(PassiveType.SHADOW_WALKER):
+            total_threat *= 0.95  # 5% reduction - predictable hiding preference
+
+        return min(1.0, total_threat)
 
     def predict_hide_or_run(self, player: Player, location) -> tuple:
         """

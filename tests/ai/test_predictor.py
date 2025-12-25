@@ -45,17 +45,18 @@ class TestAIPredictorInitialization:
 class TestPredictionStrategies:
     """Tests for different prediction strategies."""
 
-    def test_random_prediction_early_game(self, temp_config_dir, sample_location_manager, deterministic_random):
-        """Test rounds 1-3 always use random prediction."""
+    def test_prediction_early_game_no_history(self, temp_config_dir, sample_location_manager, deterministic_random):
+        """Test early game prediction with no player history uses behavioral analysis."""
         ai = AIPredictor(sample_location_manager)
         player = Player(1, "Alice")
 
-        # Rounds 1-3 should be random
-        for round_num in range(1, 4):
-            location_name, confidence, reasoning = ai.predict_player_location(player, 1)
+        # Even early in the game, AI uses advanced behavioral prediction
+        location_name, confidence, reasoning = ai.predict_player_location(player, 1)
 
-            assert confidence == pytest.approx(0.125, abs=0.01)  # 1/8 random (or 1/5 for 5 locations)
-            assert "learning" in reasoning.lower()
+        # Confidence should be reasonable (not random 1/n, but based on analysis)
+        assert 0.0 < confidence <= 1.0
+        # Location should be valid
+        assert location_name in [loc.name for loc in sample_location_manager.get_all()]
 
     def test_simple_pattern_prediction_mid_game(self, temp_config_dir, sample_location_manager, deterministic_random, monkeypatch):
         """Test rounds 4-6 use simple pattern prediction."""
@@ -115,19 +116,19 @@ class TestPredictionStrategies:
         assert isinstance(location_name, str)
         assert 0 <= confidence <= 1
 
-    @pytest.mark.parametrize("round_num,expected_strategy", [
-        (2, "random"),
-        (5, "simple"),
-        (8, "advanced"),
+    @pytest.mark.parametrize("round_num,has_history", [
+        (2, False),
+        (5, True),
+        (8, True),
     ])
-    def test_prediction_strategy_progression(self, round_num, expected_strategy, temp_config_dir,
+    def test_prediction_works_across_rounds(self, round_num, has_history, temp_config_dir,
                                             sample_location_manager, deterministic_random):
-        """Test correct strategy used based on round number."""
+        """Test prediction works correctly at different game stages."""
         ai = AIPredictor(sample_location_manager)
         player = Player(1, "Alice")
 
-        # Add minimal history for simple/advanced to work
-        if round_num >= 4:
+        # Add history if applicable
+        if has_history:
             loc = sample_location_manager.get_location(0)
             for i in range(5):
                 player.record_choice(loc, i+1, False, 10, 10)
@@ -135,11 +136,11 @@ class TestPredictionStrategies:
         ai.round_num = round_num - 1
         location_name, confidence, reasoning = ai.predict_player_location(player, 1)
 
-        if expected_strategy == "random":
-            assert "learning" in reasoning.lower()
-        else:
-            # Simple or advanced - just verify it works
-            assert isinstance(location_name, str)
+        # AI always uses advanced behavioral prediction
+        assert isinstance(location_name, str)
+        assert location_name in [loc.name for loc in sample_location_manager.get_all()]
+        assert 0 < confidence <= 1
+        assert isinstance(reasoning, str)
 
     def test_prediction_confidence_range(self, temp_config_dir, sample_location_manager, deterministic_random):
         """Test confidence is always 0-1."""
@@ -170,7 +171,7 @@ class TestMLFeatureExtraction:
 
         # Should return a list of numeric features
         assert isinstance(features, list)
-        assert len(features) == 12  # Expected feature count (3 current + 8 history + 1 items)
+        assert len(features) == 16  # Expected feature count (3 current + 8 history + 1 passives + 4 passive types)
         assert all(isinstance(f, (int, float)) for f in features)
 
     def test_extract_ml_features_no_history(self, temp_config_dir, sample_location_manager):
@@ -180,7 +181,7 @@ class TestMLFeatureExtraction:
 
         features = ai._extract_ml_features(player, num_players_alive=2)
 
-        assert len(features) == 12
+        assert len(features) == 16  # 3 current + 8 history + 1 passives + 4 passive types
         # Many features should be 0 with no history (features 3-10 are history features)
         assert features[3] == 0  # avg_value (first history feature)
         assert features[4] == 0  # recent_avg

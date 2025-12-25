@@ -161,18 +161,42 @@ class EscapePredictor:
         # Get valid option IDs
         valid_option_ids = {opt['id'] for opt in escape_options}
 
-        # Calculate hide vs run preference
+        # Calculate hide vs run preference from history
         hide_count = 0
         run_count = 0
+
+        # Build a map of option types from current options for reference
+        option_types = {opt['id']: opt.get('type', 'hide') for opt in escape_options}
+
         for opt_id in combined_history:
-            # Try to determine type from ID pattern
-            if 'run' in opt_id or any(r in opt_id for r in ['backdoor', 'window', 'exit', 'alley', 'garage', 'lobby', 'parking', 'mall', 'floor', 'kitchen']):
+            # Use the type field if we know it, otherwise infer from ID
+            if opt_id in option_types:
+                opt_type = option_types[opt_id]
+            else:
+                # Fallback: infer from ID pattern (for historical data)
+                if 'run' in opt_id or any(r in opt_id for r in ['alley', 'exit', 'garage', 'lobby', 'parking', 'mall', 'floor', 'kitchen', 'corridor', 'window']):
+                    opt_type = 'run'
+                else:
+                    opt_type = 'hide'
+
+            if opt_type == 'run':
                 run_count += 1
             else:
                 hide_count += 1
 
         total_choices = hide_count + run_count
         hide_preference = hide_count / total_choices if total_choices > 0 else 0.5
+
+        # Adjust hide preference based on player passives
+        from game.passives import PassiveType
+        if hasattr(player, 'has_passive'):
+            # Shadow Walker: +20% hide bonus, -10% run - strongly prefers hiding
+            if player.has_passive(PassiveType.SHADOW_WALKER):
+                hide_preference = min(1.0, hide_preference + 0.25)
+
+            # Quick Feet: +25% run bonus, keeps 95% points - prefers running
+            if player.has_passive(PassiveType.QUICK_FEET):
+                hide_preference = max(0.0, hide_preference - 0.20)
 
         for opt in escape_options:
             score = 1.0  # Base score
@@ -207,6 +231,11 @@ class EscapePredictor:
         # Normalize to confidence
         total_score = sum(option_scores.values())
         confidence = pred_score / total_score if total_score > 0 else 0.2
+
+        # Escape Artist makes players harder to predict - they have a second chance
+        # so they may take more risks with their escape choices
+        if hasattr(player, 'has_passive') and player.has_passive(PassiveType.ESCAPE_ARTIST):
+            confidence *= 0.85  # 15% reduction in prediction confidence
 
         # Generate reasoning
         reasoning = self._generate_reasoning(

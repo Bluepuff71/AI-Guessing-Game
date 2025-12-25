@@ -31,7 +31,7 @@ class TestExtractFeatures:
         assert 'choice_variety' in features
         assert 'high_value_preference' in features
         assert 'total_choices' in features
-        assert 'num_items' in features
+        assert 'num_passives' in features
         assert 'recent_avg_value' in features
         assert 'risk_trend' in features
 
