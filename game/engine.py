@@ -130,7 +130,7 @@ class GameEngine:
         for player in alive_players:
             # Clear console and show fresh context for this player
             ui.clear()
-            ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
+            ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
 
             # Show current standings WITH choices made so far
             ui.print_standings(self.players, player_choices)
@@ -189,7 +189,7 @@ class GameEngine:
 
             # Ask if player wants to buy
             num_items = len(list(ItemType))
-            choice = ui.get_player_input(f"Buy item? (1-{num_items} or Enter to skip): ", None)
+            choice = ui.get_player_input(f"Buy item? (1-{num_items} or Enter to skip): ", None, player.color)
 
             # Skip if empty or "skip"
             if choice.strip() == "" or choice.lower() == "skip":
@@ -224,7 +224,7 @@ class GameEngine:
                         if not auto_consumed_item:
                             ui.console.input("\n[dim]Press Enter to continue shopping...[/dim]")
                         ui.clear()
-                        ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
+                        ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
 
                         # Show locations so player has context
                         ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager)
@@ -235,7 +235,7 @@ class GameEngine:
                         ui.console.print(f"[red]Not enough points! Need {item.cost}, have {player.points}[/red]")
                         ui.console.input("\n[dim]Press Enter to continue...[/dim]")
                         ui.clear()
-                        ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN")
+                        ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
                         ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager)
                         ui.console.print()
                         # Continue loop, don't exit
@@ -321,9 +321,9 @@ class GameEngine:
 
     def choose_location_phase(self, player: Player) -> Location:
         """Handle location choice for a player."""
-        ui.console.print("[bold]Choose your looting location:[/bold]")
+        ui.console.print(f"[bold {player.color}]Choose your looting location:[/bold {player.color}]")
         num_locations = len(self.location_manager)
-        choice = ui.get_player_input(f"Location (1-{num_locations}): ", range(1, num_locations + 1))
+        choice = ui.get_player_input(f"Location (1-{num_locations}): ", range(1, num_locations + 1), player.color)
 
         location_index = int(choice) - 1
         location = self.location_manager.get_location(location_index)

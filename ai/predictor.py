@@ -116,7 +116,7 @@ class AIPredictor:
         if event.point_modifier:
             # Positive point modifiers make location more attractive
             # Test if it increases points
-            test_points = event.point_modifier(10)
+            test_points = event.apply_point_modifier(10)
             if test_points > 10:
                 # Good event - player more likely to go
                 confidence = min(confidence * 1.3, 0.95)

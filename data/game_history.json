@@ -2678,6 +2678,58 @@
           ]
         }
       ]
+    },
+    {
+      "game_id": "423c1936-0b12-485b-aea1-820cc6d1906a",
+      "timestamp": "2025-12-25T04:01:51.877124+00:00",
+      "num_players": 2,
+      "num_rounds": 0,
+      "winner": "AI",
+      "winner_profile_id": null,
+      "players": [
+        {
+          "profile_id": null,
+          "name": "Alice",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        },
+        {
+          "profile_id": null,
+          "name": "Bob",
+          "final_points": 0,
+          "alive": true,
+          "rounds_survived": 1,
+          "round_history": [
+            {
+              "round": 1,
+              "location": "Test Store",
+              "location_value": 10,
+              "points_before": -10,
+              "points_earned": 10,
+              "caught": false,
+              "items_held": []
+            }
+          ],
+          "choice_history": [
+            "Test Store"
+          ]
+        }
+      ]
     }
   ]
 }

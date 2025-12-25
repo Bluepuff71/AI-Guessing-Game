@@ -43,11 +43,11 @@ def clear():
     console.clear()
 
 
-def print_header(text: str):
+def print_header(text: str, color: str = "cyan"):
     """Print a styled header."""
-    console.print(f"\n[bold cyan]{'=' * 50}[/bold cyan]")
-    console.print(f"[bold cyan]{text.center(50)}[/bold cyan]")
-    console.print(f"[bold cyan]{'=' * 50}[/bold cyan]\n")
+    console.print(f"\n[bold {color}]{'=' * 50}[/bold {color}]")
+    console.print(f"[bold {color}]{text.center(50)}[/bold {color}]")
+    console.print(f"[bold {color}]{'=' * 50}[/bold {color}]\n")
 
 
 def print_standings(players: List[Player], player_choices: Dict[Player, Location] = None):
@@ -150,10 +150,10 @@ def print_shop():
     console.print()
 
 
-def get_player_input(prompt: str, valid_range: range = None) -> str:
+def get_player_input(prompt: str, valid_range: range = None, color: str = "green") -> str:
     """Get input from player with optional validation."""
     while True:
-        response = console.input(f"[bold green]{prompt}[/bold green] ")
+        response = console.input(f"[bold {color}]{prompt}[/bold {color}] ")
         if valid_range and response.lower() != "skip":
             try:
                 num = int(response)
