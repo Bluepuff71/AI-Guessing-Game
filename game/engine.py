@@ -136,7 +136,9 @@ class GameEngine:
             ui.print_standings(self.players, player_choices)
 
             # Show locations (same for all players this round)
-            ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager)
+            # Generate scout rolls if player has Scout item
+            scout_rolls = self._generate_scout_rolls_if_needed(player)
+            ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, scout_rolls)
 
             # Shop phase
             self.shop_phase(player)
@@ -210,15 +212,12 @@ class GameEngine:
                         # Track if item has its own prompt
                         auto_consumed_item = False
 
-                        # Auto-activate items based on type
+                        # Auto-activate items based on type (only Intel Report is immediate)
                         if item_type == ItemType.INTEL_REPORT:
                             self.show_intel_report(player)
                             item.consumed = True  # Intel Report is consumed immediately
                             auto_consumed_item = True
-                        elif item_type == ItemType.SCOUT:
-                            self.show_scout_preview(player)
-                            player.use_item(ItemType.SCOUT)
-                            auto_consumed_item = True
+                        # Scout and Smoke Bomb are saved for later use - don't consume them here
 
                         # Only show prompt for items without their own UI
                         if not auto_consumed_item:
@@ -227,7 +226,9 @@ class GameEngine:
                         ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
 
                         # Show locations so player has context
-                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager)
+                        # Generate scout rolls if player has Scout item
+                        scout_rolls = self._generate_scout_rolls_if_needed(player)
+                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, scout_rolls)
 
                         ui.console.print()
                         # Continue loop to allow more purchases
@@ -236,7 +237,8 @@ class GameEngine:
                         ui.console.input("\n[dim]Press Enter to continue...[/dim]")
                         ui.clear()
                         ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
-                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager)
+                        scout_rolls = self._generate_scout_rolls_if_needed(player)
+                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, scout_rolls)
                         ui.console.print()
                         # Continue loop, don't exit
                 else:
@@ -261,6 +263,22 @@ class GameEngine:
             ui.console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{preview_roll:>2} pts[/yellow] [dim](range: {loc.get_range_str()})[/dim]")
 
         ui.console.print("\n[dim]Note: These are YOUR potential rolls. Other players will get different amounts.[/dim]")
+
+    def _generate_scout_rolls_if_needed(self, player: Player) -> Optional[Dict[str, int]]:
+        """Generate scout rolls for a player if they have Scout item active.
+        Returns the scout rolls dict or None if player doesn't have Scout."""
+        if not player.has_item(ItemType.SCOUT):
+            return None
+
+        # Only generate if not already generated for this player this round
+        if player.id not in self.scout_rolls:
+            self.scout_rolls[player.id] = {}
+            locations = self.location_manager.get_all()
+            for loc in locations:
+                preview_roll = loc.roll_points()
+                self.scout_rolls[player.id][loc.name] = preview_roll
+
+        return self.scout_rolls[player.id]
 
     def show_intel_report(self, player: Player):
         """Show Intel Report to a player."""
@@ -329,6 +347,10 @@ class GameEngine:
         location = self.location_manager.get_location(location_index)
 
         ui.console.print(f"[green]You chose: {location.emoji} {location.name} ({location.get_range_str()} pts)[/green]")
+
+        # Consume Scout item if it was used
+        if player.has_item(ItemType.SCOUT):
+            player.use_item(ItemType.SCOUT)
 
         return location
 

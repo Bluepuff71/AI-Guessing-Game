@@ -90,8 +90,8 @@ def print_standings(players: List[Player], player_choices: Dict[Player, Location
     console.print()
 
 
-def print_locations(location_manager: LocationManager, previous_ai_location: Location = None, event_manager=None):
-    """Print available loot locations with active events."""
+def print_locations(location_manager: LocationManager, previous_ai_location: Location = None, event_manager=None, scout_rolls: dict = None):
+    """Print available loot locations with active events and optional Scout preview."""
     console.print("[bold]AVAILABLE LOOT THIS ROUND:[/bold]")
 
     if previous_ai_location:
@@ -102,7 +102,13 @@ def print_locations(location_manager: LocationManager, previous_ai_location: Loc
     # Clean single-column list
     locations = location_manager.get_all()
     for i, loc in enumerate(locations, 1):
-        console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{loc.get_range_str():>6} pts[/yellow]")
+        # Base location info
+        if scout_rolls and loc.name in scout_rolls:
+            # Show Scout preview roll instead of range
+            scout_roll = scout_rolls[loc.name]
+            console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [bold yellow]📡 {scout_roll:>2} pts[/bold yellow] [dim](Scout preview!)[/dim]")
+        else:
+            console.print(f"  [{i}] {loc.emoji} {loc.name:<22} [yellow]{loc.get_range_str():>6} pts[/yellow]")
 
         # Show active event for this location
         if event_manager:
