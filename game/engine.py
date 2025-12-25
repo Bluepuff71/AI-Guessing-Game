@@ -386,7 +386,6 @@ class GameEngine:
             # Check for guaranteed catch event
             if special_effect == "guaranteed_catch" and not caught:
                 # Small chance of being caught even if AI didn't search here
-                import random
                 if random.random() < 0.3:  # 30% chance
                     caught = True
                     ui.console.print(f"\n[red]⚠️ Silent Alarm! [{player.color}]{player.name}[/{player.color}] was caught![/red]")
