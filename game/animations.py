@@ -80,9 +80,15 @@ def play_gif_popup(gif_path: str, duration: float = None):
                 root.destroy()
                 return
 
+            # Stop after playing through all frames once
+            if current_frame[0] >= len(photo_frames):
+                root.quit()
+                root.destroy()
+                return
+
             label.config(image=photo_frames[current_frame[0]])
             delay = frame_delays[current_frame[0]]
-            current_frame[0] = (current_frame[0] + 1) % len(photo_frames)
+            current_frame[0] += 1
             root.after(delay, animate)
 
         def close_early(event):
