@@ -49,9 +49,9 @@ class TestShopPhase:
         player = game_engine.players[0]
         player.points = 20
 
-        # Mock console.input to skip purchase
+        # Mock select_passive to return None (skip)
         import game.ui
-        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
+        monkeypatch.setattr(game.ui, 'select_passive', lambda p: None)
 
         game_engine.shop_phase(player)
 
@@ -70,10 +70,11 @@ class TestShopPhase:
         player = game_engine.players[0]
         player.points = 50
 
-        # Mock console.input for passives purchase flow
+        # Mock select_passive: buy first passive (1), then skip (None)
         import game.ui
-        inputs = iter(["p", "1", "", ""])  # passives menu, buy first, continue, exit
-        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs, ""))
+        selections = iter([1, None])
+        monkeypatch.setattr(game.ui, 'select_passive', lambda p: next(selections, None))
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
 
         game_engine.shop_phase(player)
 
@@ -91,10 +92,11 @@ class TestShopPhase:
         player = game_engine.players[0]
         player.points = 5
 
-        # Try to buy passive, insufficient points, then skip
+        # Mock select_passive: try to buy expensive passive (1), then skip (None)
         import game.ui
-        inputs = iter(["p", "1", "", ""])
-        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs, ""))
+        selections = iter([1, None])
+        monkeypatch.setattr(game.ui, 'select_passive', lambda p: next(selections, None))
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
 
         game_engine.shop_phase(player)
 
@@ -109,9 +111,9 @@ class TestChooseLocationPhase:
         """Test choosing a valid location."""
         player = game_engine.players[0]
 
-        # Mock console.input to choose location 1
+        # Mock select_location to choose location index 0
         import game.ui
-        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "1")
+        monkeypatch.setattr(game.ui, 'select_location', lambda lm, scout_rolls=None, point_hints=None: 0)
 
         location = game_engine.choose_location_phase(player)
 
@@ -478,10 +480,11 @@ class TestPassiveShopPhase:
         player = game_engine.players[0]
         player.points = 50
 
-        # Mock console.input: 'p' for passives, '1' to buy first passive, '' to continue
+        # Mock select_passive: buy first passive (1), then skip (None)
         import game.ui
-        inputs = iter(["p", "1", "", ""])
-        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs, ""))
+        selections = iter([1, None])
+        monkeypatch.setattr(game.ui, 'select_passive', lambda p: next(selections, None))
+        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: "")
 
         game_engine.shop_phase(player)
 
@@ -1523,7 +1526,7 @@ class TestShopPhaseEdgeCases:
         assert "Skipping shop" in result or "no points" in result.lower()
 
     def test_shop_phase_invalid_input(self, game_engine, monkeypatch, mock_console, temp_passives_config):
-        """Test shop phase handles invalid input."""
+        """Test shop phase handles skip selection (arrow-key selection handles invalid inputs)."""
         from game.passives import PassiveShop
         from game.config_loader import ConfigLoader
         import game.ui
@@ -1536,14 +1539,13 @@ class TestShopPhaseEdgeCases:
         player = game_engine.players[0]
         player.points = 50
 
-        # Mock console: invalid input, then skip
-        inputs = iter(["abc", ""])
-        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs, ""))
+        # Mock select_passive to skip (None)
+        monkeypatch.setattr(game.ui, 'select_passive', lambda p: None)
 
         game_engine.shop_phase(player)
 
-        result = output.getvalue()
-        assert "Invalid" in result or player.points == 50
+        # Player should have same points (skipped)
+        assert player.points == 50
 
     def test_shop_phase_already_owned(self, game_engine, monkeypatch, mock_console, temp_passives_config):
         """Test shop phase shows already owned message."""

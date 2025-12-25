@@ -60,19 +60,8 @@ def show_main_menu():
                 )
         ui.console.print()
 
-    ui.console.print("[bold]MAIN MENU:[/bold]")
-    ui.console.print("[1] Start New Game")
-    ui.console.print("[P] Manage Profiles")
-    ui.console.print("[A] Animation Test")
-    ui.console.print("[2] Reset AI Training Data")
-    ui.console.print("[3] Exit")
-    ui.console.print()
-
-    while True:
-        choice = ui.console.input("[bold green]Select option:[/bold green] ").strip().upper()
-        if choice in ['1', '2', '3', 'P', 'A']:
-            return choice
-        ui.console.print("[red]Please enter 1, P, A, 2, or 3[/red]")
+    # Use arrow-key selection for main menu
+    return ui.select_main_menu()
 
 
 def reset_ai_data():
@@ -127,13 +116,26 @@ def manage_profiles():
 
     while True:
         profiles = pm.list_all_profiles()
-        ui.print_profile_selection_menu(profiles)
+        ui.clear()
+        ui.print_header("MANAGE PROFILES")
 
         if not profiles:
             # No profiles exist, prompt to create one
+            ui.console.print("[yellow]No profiles found. Create your first profile![/yellow]\n")
             choice = 'N'
         else:
-            choice = ui.get_profile_selection(len(profiles))
+            # Show profile table for context
+            from rich.table import Table
+            table = Table(title="Your Profiles")
+            table.add_column("Name", style="green")
+            table.add_column("Record", style="yellow")
+            for profile in profiles:
+                table.add_row(profile.name, f"{profile.wins}W-{profile.losses}L")
+            ui.console.print(table)
+            ui.console.print()
+
+            # Use arrow-key selection
+            choice = ui.get_profile_selection(profiles)
 
         if choice == 'Q':
             return
@@ -146,24 +148,21 @@ def manage_profiles():
                 ui.console.print(f"[green]✓ Profile '{name}' created![/green]")
                 ui.console.input("\n[dim]Press Enter to continue...[/dim]")
         elif choice == 'D':
-            # Delete profile
+            # Delete profile - use arrow selection to pick which one
             if profiles:
                 ui.console.print()
-                profile_num = ui.console.input("[bold yellow]Enter profile number to delete:[/bold yellow] ").strip()
-                try:
-                    idx = int(profile_num) - 1
-                    if 0 <= idx < len(profiles):
-                        profile = profiles[idx]
-                        confirm = ui.console.input(f"[red]Delete '{profile.name}'? (yes/no):[/red] ").strip().lower()
-                        if confirm == 'yes':
-                            pm.delete_profile(profile.profile_id)
-                            ui.console.print("[green]✓ Profile deleted![/green]")
-                        else:
-                            ui.console.print("[dim]Deletion cancelled.[/dim]")
+                delete_choices = [{'text': p.name, 'value': i} for i, p in enumerate(profiles)]
+                delete_choices.append({'text': "Cancel", 'value': -1})
+                idx = ui.select_option(delete_choices, "Select profile to delete:")
+
+                if idx >= 0:
+                    profile = profiles[idx]
+                    confirm = ui.console.input(f"[red]Delete '{profile.name}'? (yes/no):[/red] ").strip().lower()
+                    if confirm == 'yes':
+                        pm.delete_profile(profile.profile_id)
+                        ui.console.print("[green]✓ Profile deleted![/green]")
                     else:
-                        ui.console.print("[red]Invalid profile number.[/red]")
-                except ValueError:
-                    ui.console.print("[red]Invalid input.[/red]")
+                        ui.console.print("[dim]Deletion cancelled.[/dim]")
                 ui.console.input("\n[dim]Press Enter to continue...[/dim]")
         else:
             # View profile details
@@ -190,53 +189,35 @@ def select_profiles_for_game(num_players: int) -> List[Optional[PlayerProfile]]:
 
         profiles = pm.list_all_profiles()
 
-        if profiles:
-            ui.console.print("[bold]Available Profiles:[/bold]")
-            for j, profile in enumerate(profiles[:10], 1):  # Show max 10
-                ui.console.print(
-                    f"  [{j}] {profile.name} - {profile.wins}W-{profile.losses}L "
-                    f"({profile.win_rate * 100:.0f}% wins)"
-                )
-            ui.console.print()
+        # Use arrow-key selection
+        choice = ui.select_profile_for_player(profiles, i + 1)
 
-        ui.console.print("[N] Create New Profile")
-        ui.console.print("[G] Play as Guest (no profile)")
-        ui.console.print()
-
-        while True:
-            choice = ui.console.input("[bold green]Select:[/bold green] ").strip().upper()
-
-            if choice == 'N':
-                # Create new profile
-                name = ui.console.input("\n[bold green]Enter name for new profile:[/bold green] ").strip()
-                if name:
-                    profile = pm.create_profile(name)
-                    selected_profiles.append(profile)
-                    ui.console.print(f"[green]✓ Profile '{name}' created![/green]")
-                    ui.console.input("\n[dim]Press Enter to continue...[/dim]")
-                    break
-            elif choice == 'G':
-                # Play as guest
-                name = ui.console.input("\n[bold green]Enter name for guest player:[/bold green] ").strip()
-                if not name:
-                    name = f"Player {i+1}"
-                selected_profiles.append(None)  # None = guest
-                break
-            else:
-                # Select existing profile
-                try:
-                    idx = int(choice) - 1
-                    if 0 <= idx < len(profiles):
-                        profile = pm.load_profile(profiles[idx].profile_id)
-                        if profile:
-                            selected_profiles.append(profile)
-                            ui.console.print(f"[green]✓ Selected {profile.name}[/green]")
-                            ui.console.input("\n[dim]Press Enter to continue...[/dim]")
-                            break
-                except ValueError:
-                    pass
-
-                ui.console.print("[red]Invalid choice. Try again.[/red]")
+        if choice == 'N':
+            # Create new profile
+            name = ui.console.input("\n[bold green]Enter name for new profile:[/bold green] ").strip()
+            if name:
+                profile = pm.create_profile(name)
+                selected_profiles.append(profile)
+                ui.console.print(f"[green]✓ Profile '{name}' created![/green]")
+                ui.console.input("\n[dim]Press Enter to continue...[/dim]")
+        elif choice == 'G':
+            # Play as guest
+            name = ui.console.input("\n[bold green]Enter name for guest player:[/bold green] ").strip()
+            if not name:
+                name = f"Player {i+1}"
+            selected_profiles.append(None)  # None = guest
+        else:
+            # Select existing profile
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(profiles):
+                    profile = pm.load_profile(profiles[idx].profile_id)
+                    if profile:
+                        selected_profiles.append(profile)
+                        ui.console.print(f"[green]✓ Selected {profile.name}[/green]")
+                        ui.console.input("\n[dim]Press Enter to continue...[/dim]")
+            except ValueError:
+                pass
 
     return selected_profiles
 
@@ -248,18 +229,8 @@ def start_game():
     ui.clear()
     ui.console.print("\n[bold cyan]Starting New Game[/bold cyan]\n")
 
-    # Get number of players
-    while True:
-        try:
-            num_players = ui.console.input("[bold green]Enter number of players (2-6):[/bold green] ")
-            num_players = int(num_players)
-
-            if 2 <= num_players <= 6:
-                break
-            else:
-                ui.console.print("[red]Please enter a number between 2 and 6[/red]")
-        except ValueError:
-            ui.console.print("[red]Please enter a valid number[/red]")
+    # Get number of players using arrow-key selection
+    num_players = ui.select_player_count()
 
     # Select profiles for each player
     selected_profiles = select_profiles_for_game(num_players)
@@ -275,14 +246,9 @@ def test_animations():
     while True:
         ui.clear()
         ui.console.print("\n[bold cyan]ANIMATION TEST[/bold cyan]\n")
-        ui.console.print("[1] Elimination (player dies)")
-        ui.console.print("[2] Victory (player wins)")
-        ui.console.print("[3] Escape (player outsmarts AI)")
-        ui.console.print("[4] Play all")
-        ui.console.print("[Q] Back to menu")
-        ui.console.print()
 
-        choice = ui.console.input("[bold green]Select:[/bold green] ").strip().upper()
+        # Use arrow-key selection
+        choice = ui.select_animation_test()
 
         if choice == 'Q':
             return
@@ -300,9 +266,6 @@ def test_animations():
             play_elimination_animation()
             play_victory_animation()
             play_escape_animation()
-        else:
-            ui.console.print("[red]Invalid choice[/red]")
-            ui.console.input("[dim]Press Enter...[/dim]")
 
 
 def main():

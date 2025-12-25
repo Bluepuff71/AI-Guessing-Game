@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List
 from io import StringIO
+from unittest.mock import MagicMock
 
 import pytest
 import numpy as np
@@ -485,3 +486,37 @@ def temp_profile_with_games(tmp_path, monkeypatch):
         "profile_id": "test_profile_123",
         "games": game_history["games"]
     }
+
+
+@pytest.fixture
+def mock_questionary(monkeypatch):
+    """Mock questionary.select for testing arrow-key selection functions.
+
+    Returns a function that can be called to set the return value for the next select call.
+    Usage:
+        mock_questionary(return_value)  # Sets what select will return
+    """
+    return_values = []
+
+    class MockQuestion:
+        """Mock questionary Question object."""
+        def __init__(self, value):
+            self.value = value
+
+        def ask(self):
+            return self.value
+
+    def mock_select(*args, **kwargs):
+        """Return a MockQuestion that returns the configured value."""
+        if return_values:
+            return MockQuestion(return_values.pop(0))
+        return MockQuestion(None)
+
+    import questionary
+    monkeypatch.setattr(questionary, 'select', mock_select)
+
+    def set_return_value(value):
+        """Set the return value for the next select call."""
+        return_values.append(value)
+
+    return set_return_value

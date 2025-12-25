@@ -179,60 +179,43 @@ class GameEngine:
                 ui.console.print("Your passives: [dim]None[/dim]")
 
             ui.console.print()
-            ui.print_passive_shop(player)
 
-            # Ask if player wants to buy
-            num_passives = PassiveShop.get_passive_count()
-            choice = ui.get_player_input(f"Buy passive? (1-{num_passives} or Enter to skip): ", None, player.color)
+            # Use arrow-key selection for passive purchase
+            passive_num = ui.select_passive(player)
 
-            # Skip if empty or "skip"
-            if choice.strip() == "" or choice.lower() == "skip":
+            # Skip if None (user chose to skip)
+            if passive_num is None:
                 ui.console.print()
                 return
 
             # Try to purchase passive
-            try:
-                passive_num = int(choice)
-                if 1 <= passive_num <= num_passives:
-                    passive = PassiveShop.get_passive_by_index(passive_num)
+            passive = PassiveShop.get_passive_by_index(passive_num)
 
-                    if passive is None:
-                        ui.console.print("[red]Invalid passive[/red]")
-                        continue
+            if passive is None:
+                ui.console.print("[red]Invalid passive[/red]")
+                continue
 
-                    # Check if already owned
-                    if player.has_passive(passive.type):
-                        ui.console.print(f"[yellow]You already own {passive.name}![/yellow]")
-                        ui.console.print()
-                        continue
+            if player.buy_passive(passive):
+                ui.console.print(f"[green]✓ Bought {passive.emoji} {passive.name} for {passive.cost} pts[/green]")
+                ui.console.input("\n[dim]Press Enter to continue shopping...[/dim]")
+                ui.clear()
+                ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
 
-                    if player.buy_passive(passive):
-                        ui.console.print(f"[green]✓ Bought {passive.emoji} {passive.name} for {passive.cost} pts[/green]")
-                        ui.console.input("\n[dim]Press Enter to continue shopping...[/dim]")
-                        ui.clear()
-                        ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
+                # Show locations with point hints if player has Inside Knowledge
+                point_hints = self._generate_point_hints(player)
+                ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, point_hints=point_hints)
 
-                        # Show locations with point hints if player has Inside Knowledge
-                        point_hints = self._generate_point_hints(player)
-                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, point_hints=point_hints)
-
-                        ui.console.print()
-                        # Continue loop to allow more purchases
-                    else:
-                        ui.console.print(f"[red]Not enough points! Need {passive.cost}, have {player.points}[/red]")
-                        ui.console.input("\n[dim]Press Enter to continue...[/dim]")
-                        ui.clear()
-                        ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
-                        point_hints = self._generate_point_hints(player)
-                        ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, point_hints=point_hints)
-                        ui.console.print()
-                        # Continue loop, don't exit
-                else:
-                    ui.console.print(f"[red]Invalid choice - please enter 1-{num_passives}[/red]")
-                    ui.console.print()
-            except (ValueError, IndexError):
-                ui.console.print("[red]Invalid choice[/red]")
                 ui.console.print()
+                # Continue loop to allow more purchases
+            else:
+                ui.console.print(f"[red]Not enough points! Need {passive.cost}, have {player.points}[/red]")
+                ui.console.input("\n[dim]Press Enter to continue...[/dim]")
+                ui.clear()
+                ui.print_header(f"ROUND {self.round_num} - {player.name.upper()}'S TURN", player.color)
+                point_hints = self._generate_point_hints(player)
+                ui.print_locations(self.location_manager, self.last_ai_search_location, self.event_manager, point_hints=point_hints)
+                ui.console.print()
+                # Continue loop, don't exit
 
     def _generate_point_hints(self, player: Player) -> Optional[Dict[str, str]]:
         """Generate point hints if player has Inside Knowledge passive.
@@ -316,11 +299,11 @@ class GameEngine:
 
     def choose_location_phase(self, player: Player) -> Location:
         """Handle location choice for a player."""
-        ui.console.print(f"[bold {player.color}]Choose your looting location:[/bold {player.color}]")
-        num_locations = len(self.location_manager)
-        choice = ui.get_player_input(f"Location (1-{num_locations}): ", range(1, num_locations + 1), player.color)
+        # Get point hints if player has Inside Knowledge
+        point_hints = self._generate_point_hints(player)
 
-        location_index = int(choice) - 1
+        # Use arrow-key selection for location choice
+        location_index = ui.select_location(self.location_manager, point_hints=point_hints)
         location = self.location_manager.get_location(location_index)
 
         ui.console.print(f"[green]You chose: {location.emoji} {location.name} ({location.get_range_str()} pts)[/green]")

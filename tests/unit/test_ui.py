@@ -445,14 +445,26 @@ class TestProfileUI:
         result = output.getvalue()
         assert "Player1" in result
 
-    def test_get_profile_selection(self, mock_console, monkeypatch):
+    def test_get_profile_selection(self, mock_console, mock_questionary):
         """Test get_profile_selection returns valid input."""
         from game.ui import get_profile_selection
+        from dataclasses import dataclass
 
         console, output = mock_console
-        monkeypatch.setattr('builtins.input', lambda: "1")
 
-        result = get_profile_selection(max_number=5)
+        # Create mock profiles
+        @dataclass
+        class MockProfile:
+            name: str
+            wins: int
+            losses: int
+
+        profiles = [MockProfile("Alice", 5, 2), MockProfile("Bob", 3, 3)]
+
+        # Mock questionary to return "1" (first profile)
+        mock_questionary("1")
+
+        result = get_profile_selection(profiles)
 
         assert result == "1"
 
@@ -512,18 +524,19 @@ class TestHidingUI:
         result = output.getvalue()
         assert len(result) > 0
 
-    def test_select_escape_option(self, mock_console, monkeypatch, temp_config_dir):
+    def test_select_escape_option(self, mock_console, mock_questionary, temp_config_dir):
         """Test select_escape_option returns selected option."""
         from game.ui import select_escape_option
 
         console, output = mock_console
-        # Mock input to select first option
-        monkeypatch.setattr('builtins.input', lambda: "1")
 
         escape_options = [
             {'id': 'hide1', 'name': 'Hide Spot 1', 'description': 'A hiding spot', 'emoji': '📦', 'type': 'hide'},
             {'id': 'run1', 'name': 'Run Route 1', 'description': 'An escape route', 'emoji': '🚪', 'type': 'run'}
         ]
+
+        # Mock questionary to select first option (the hide option dict)
+        mock_questionary(escape_options[0])
 
         player = Player(1, "Alice")
         result = select_escape_option(escape_options, player, location_points=20)
@@ -1034,33 +1047,47 @@ class TestPrintProfileStatsSummary:
 class TestGetProfileSelection:
     """Tests for get_profile_selection function."""
 
-    def test_get_profile_selection_invalid_then_valid(self, mock_console, monkeypatch):
-        """Test get_profile_selection handles invalid input then valid."""
+    def test_get_profile_selection_new_profile(self, mock_console, mock_questionary):
+        """Test get_profile_selection returns 'N' for new profile action."""
         from game.ui import get_profile_selection
-        import game.ui
+        from dataclasses import dataclass
 
         console, output = mock_console
 
-        # Mock console.input to return invalid then valid
-        inputs = iter(["abc", "N"])
-        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs))
+        @dataclass
+        class MockProfile:
+            name: str
+            wins: int
+            losses: int
 
-        result = get_profile_selection(max_number=5)
+        profiles = [MockProfile("Alice", 5, 2)]
+
+        # Mock questionary to return 'N' (new profile action)
+        mock_questionary('N')
+
+        result = get_profile_selection(profiles)
 
         assert result == "N"
 
-    def test_get_profile_selection_out_of_range_then_valid(self, mock_console, monkeypatch):
-        """Test get_profile_selection handles out of range then valid."""
+    def test_get_profile_selection_second_profile(self, mock_console, mock_questionary):
+        """Test get_profile_selection returns correct profile number."""
         from game.ui import get_profile_selection
-        import game.ui
+        from dataclasses import dataclass
 
         console, output = mock_console
 
-        # Mock console.input to return out of range then valid
-        inputs = iter(["10", "2"])
-        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs))
+        @dataclass
+        class MockProfile:
+            name: str
+            wins: int
+            losses: int
 
-        result = get_profile_selection(max_number=5)
+        profiles = [MockProfile("Alice", 5, 2), MockProfile("Bob", 3, 3)]
+
+        # Mock questionary to return '2' (second profile)
+        mock_questionary('2')
+
+        result = get_profile_selection(profiles)
 
         assert result == "2"
 
@@ -1122,10 +1149,9 @@ class TestPrintCurrentProfileEdgeCases:
 class TestSelectEscapeOptionEdgeCases:
     """Tests for select_escape_option edge cases."""
 
-    def test_select_escape_option_invalid_then_valid(self, mock_console, monkeypatch, temp_config_dir):
-        """Test select_escape_option handles invalid input."""
+    def test_select_escape_option_run_choice(self, mock_console, mock_questionary, temp_config_dir):
+        """Test select_escape_option returns run option when selected."""
         from game.ui import select_escape_option
-        import game.ui
 
         console, output = mock_console
 
@@ -1135,13 +1161,13 @@ class TestSelectEscapeOptionEdgeCases:
             {'id': 'run1', 'name': 'Back Door', 'description': 'Run out back', 'emoji': '🚪', 'type': 'run'}
         ]
 
-        # Mock console.input to return invalid then valid
-        inputs = iter(["abc", "0", "5", "1"])
-        monkeypatch.setattr(game.ui.console, 'input', lambda prompt: next(inputs))
+        # Mock questionary to select the run option
+        mock_questionary(escape_options[1])
 
         result = select_escape_option(escape_options, player, location_points=20)
 
-        assert result['id'] == 'hide1'
+        assert result['id'] == 'run1'
+        assert result['type'] == 'run'
 
 
 class TestPrintEscapeResultEdgeCases:

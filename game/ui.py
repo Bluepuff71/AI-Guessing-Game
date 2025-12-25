@@ -6,7 +6,9 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.text import Text
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+import questionary
+from questionary import Style as QStyle
 from game.player import Player
 from game.locations import Location, LocationManager
 from game.passives import PassiveShop, PassiveType
@@ -14,6 +16,17 @@ from game.animations import play_elimination_animation, play_victory_animation, 
 
 
 console = Console()
+
+# Questionary style matching Rich theme
+SELECTION_STYLE = QStyle([
+    ('qmark', 'fg:cyan bold'),
+    ('question', 'bold'),
+    ('pointer', 'fg:green bold'),
+    ('highlighted', 'fg:green bold'),
+    ('selected', 'fg:green'),
+    ('separator', 'fg:cyan'),
+    ('instruction', 'fg:gray'),
+])
 
 
 def flush_input():
@@ -31,6 +44,122 @@ def flush_input():
             termios.tcflush(sys.stdin, termios.TCIOFLUSH)
         except:
             pass
+
+
+def select_option(choices: List[Dict[str, Any]], prompt: str = "", pointer: str = ">") -> Any:
+    """
+    Display an interactive selection menu with arrow-key navigation.
+
+    Args:
+        choices: List of choice dicts with 'text' (display) and 'value' (returned) keys.
+                 Optional 'disabled' key to make an option unselectable (used as separator).
+        prompt: Optional prompt text to display above choices
+        pointer: Pointer character for highlighting (default: ">")
+
+    Returns:
+        The 'value' of the selected choice
+    """
+    flush_input()
+
+    # Build questionary choices
+    q_choices = []
+    for choice in choices:
+        if choice.get('disabled'):
+            # Use as a separator/header
+            q_choices.append(questionary.Separator(choice['text']))
+        else:
+            q_choices.append(questionary.Choice(title=choice['text'], value=choice['value']))
+
+    result = questionary.select(
+        prompt,
+        choices=q_choices,
+        style=SELECTION_STYLE,
+        pointer=pointer,
+        instruction="(arrow keys to move, Enter to select)"
+    ).ask()
+
+    return result
+
+
+def select_from_list(items: List[str], prompt: str = "", pointer: str = ">") -> int:
+    """
+    Simple selection from a list of strings.
+
+    Args:
+        items: List of string options to display
+        prompt: Optional prompt text
+        pointer: Pointer character for highlighting
+
+    Returns:
+        The 0-based index of the selected item
+    """
+    choices = [{'text': item, 'value': i} for i, item in enumerate(items)]
+    return select_option(choices, prompt, pointer)
+
+
+def select_location(location_manager: LocationManager, scout_rolls: dict = None, point_hints: dict = None) -> int:
+    """
+    Select a loot location using arrow keys.
+
+    Args:
+        location_manager: LocationManager with available locations
+        scout_rolls: Optional dict of location name -> scout preview points
+        point_hints: Optional dict of location name -> hint string
+
+    Returns:
+        0-based index of selected location
+    """
+    locations = location_manager.get_all()
+    choices = []
+
+    for i, loc in enumerate(locations):
+        # Build display text similar to print_locations
+        if scout_rolls and loc.name in scout_rolls:
+            scout_roll = scout_rolls[loc.name]
+            text = f"{loc.emoji} {loc.name:<22} 📡 {scout_roll:>2} pts (Scout preview!)"
+        elif point_hints and loc.name in point_hints:
+            hint = point_hints[loc.name]
+            text = f"{loc.emoji} {loc.name:<22} {loc.get_range_str():>6} pts  📊 {hint}"
+        else:
+            text = f"{loc.emoji} {loc.name:<22} {loc.get_range_str():>6} pts"
+
+        choices.append({'text': text, 'value': i})
+
+    return select_option(choices, "Choose your looting location:")
+
+
+def select_passive(player: Player) -> Optional[int]:
+    """
+    Select a passive to purchase using arrow keys.
+
+    Args:
+        player: Player making the purchase
+
+    Returns:
+        1-based index of selected passive, or None to skip
+    """
+    PassiveShop._load_passives()
+
+    choices = []
+    for i, passive_type in enumerate(PassiveType, 1):
+        passive = PassiveShop.PASSIVES.get(passive_type)
+        if not passive:
+            continue
+
+        owned = player.has_passive(passive_type)
+
+        if owned:
+            text = f"{passive.emoji} {passive.name} - OWNED"
+            # Still add but mark as disabled (can't reselect owned)
+            choices.append({'text': text, 'value': i, 'disabled': True})
+        else:
+            text = f"{passive.emoji} {passive.name} - {passive.cost} pts"
+            choices.append({'text': text, 'value': i})
+
+    # Add skip option
+    choices.append({'text': "⏭️  Skip (continue without buying)", 'value': None})
+
+    return select_option(choices, f"Buy a passive? (You have {player.points} pts)")
 
 
 def clear():
@@ -506,22 +635,103 @@ def print_profile_stats_summary(profile):
     console.input()
 
 
-def get_profile_selection(max_number: int) -> str:
-    """Get user input for profile selection."""
-    while True:
-        choice = console.input("[bold green]Enter your choice:[/bold green] ").strip().upper()
+def get_profile_selection(profiles: list) -> str:
+    """Get user input for profile selection using arrow keys.
 
-        if choice in ['N', 'D', 'Q']:
-            return choice
+    Args:
+        profiles: List of profile summaries to display
 
-        try:
-            num = int(choice)
-            if 1 <= num <= max_number:
-                return choice
-        except ValueError:
-            pass
+    Returns:
+        Profile number as string (1-based), or 'N', 'D', 'Q' for actions
+    """
+    choices = []
 
-        console.print("[red]Invalid choice. Please try again.[/red]")
+    # Add profile choices
+    for i, profile in enumerate(profiles, 1):
+        record = f"{profile.wins}W-{profile.losses}L"
+        text = f"{profile.name} ({record})"
+        choices.append({'text': text, 'value': str(i)})
+
+    # Add action options
+    choices.append({'text': "── Actions ──", 'disabled': True})
+    choices.append({'text': "➕ Create New Profile", 'value': 'N'})
+    choices.append({'text': "🗑️  Delete Profile", 'value': 'D'})
+    choices.append({'text': "⬅️  Back to Main Menu", 'value': 'Q'})
+
+    return select_option(choices, "Select a profile:")
+
+
+def select_main_menu() -> str:
+    """Select main menu option using arrow keys.
+
+    Returns:
+        '1' for Start Game, 'P' for Profiles, 'A' for Animations, '2' for Reset, '3' for Exit
+    """
+    choices = [
+        {'text': "🎮 Start New Game", 'value': '1'},
+        {'text': "👤 Manage Profiles", 'value': 'P'},
+        {'text': "🎬 Animation Test", 'value': 'A'},
+        {'text': "🔄 Reset AI Training Data", 'value': '2'},
+        {'text': "🚪 Exit", 'value': '3'},
+    ]
+    return select_option(choices, "Select option:")
+
+
+def select_player_count() -> int:
+    """Select number of players using arrow keys.
+
+    Returns:
+        Number of players (2-6)
+    """
+    choices = [
+        {'text': "2 Players", 'value': 2},
+        {'text': "3 Players", 'value': 3},
+        {'text': "4 Players", 'value': 4},
+        {'text': "5 Players", 'value': 5},
+        {'text': "6 Players", 'value': 6},
+    ]
+    return select_option(choices, "How many players?")
+
+
+def select_profile_for_player(profiles: list, player_num: int) -> str:
+    """Select a profile for a player using arrow keys.
+
+    Args:
+        profiles: List of available profile summaries
+        player_num: 1-based player number
+
+    Returns:
+        Profile number as string, 'N' for new, 'G' for guest
+    """
+    choices = []
+
+    # Add existing profiles
+    if profiles:
+        for i, profile in enumerate(profiles[:10], 1):  # Max 10
+            text = f"{profile.name} - {profile.wins}W-{profile.losses}L ({profile.win_rate * 100:.0f}%)"
+            choices.append({'text': text, 'value': str(i)})
+        choices.append({'text': "── Or ──", 'disabled': True})
+
+    choices.append({'text': "➕ Create New Profile", 'value': 'N'})
+    choices.append({'text': "👻 Play as Guest (no profile)", 'value': 'G'})
+
+    return select_option(choices, f"Player {player_num} - Select profile:")
+
+
+def select_animation_test() -> str:
+    """Select animation to test using arrow keys.
+
+    Returns:
+        '1' for elimination, '2' for victory, '3' for escape, '4' for all, 'Q' to quit
+    """
+    choices = [
+        {'text': "💀 Elimination (player dies)", 'value': '1'},
+        {'text': "🎉 Victory (player wins)", 'value': '2'},
+        {'text': "🏃 Escape (player outsmarts AI)", 'value': '3'},
+        {'text': "▶️  Play all animations", 'value': '4'},
+        {'text': "⬅️  Back to menu", 'value': 'Q'},
+    ]
+    return select_option(choices, "Select animation:")
 
 
 def print_current_profile(profile):
@@ -557,7 +767,7 @@ def print_caught_message(player, location):
 
 def select_escape_option(escape_options: list, player, location_points: int) -> dict:
     """
-    Present all escape options and let player choose.
+    Present all escape options and let player choose using arrow keys.
     This is the prediction-based escape system where player tries to outsmart the AI.
 
     Args:
@@ -579,38 +789,23 @@ def select_escape_option(escape_options: list, player, location_points: int) -> 
     # Calculate run points
     retention_points = int(location_points * 0.8)
 
-    # Build ordered list for selection
-    all_options = []
+    # Build choices for arrow-key selection
+    choices = []
 
-    # Show hiding spots
-    console.print(f"[bold green]HIDING SPOTS[/bold green] [dim](Survive with {retention_points} points)[/dim]")
-    for i, spot in enumerate(hiding_spots, 1):
-        console.print(f"  [{i}] {spot['emoji']} [bold]{spot['name']}[/bold]")
-        console.print(f"      [dim]{spot['description']}[/dim]")
-        all_options.append(spot)
+    # Add hiding spots section header
+    choices.append({'text': f"── HIDING SPOTS (Keep {retention_points} pts) ──", 'disabled': True})
+    for spot in hiding_spots:
+        text = f"{spot['emoji']} {spot['name']} - {spot['description']}"
+        choices.append({'text': text, 'value': spot})
 
-    console.print()
+    # Add escape routes section header
+    choices.append({'text': f"── ESCAPE ROUTES (Keep {retention_points} pts) ──", 'disabled': True})
+    for route in escape_routes:
+        text = f"{route['emoji']} {route['name']} - {route['description']}"
+        choices.append({'text': text, 'value': route})
 
-    # Show escape routes
-    console.print(f"[bold yellow]ESCAPE ROUTES[/bold yellow] [dim](Survive with {retention_points} points)[/dim]")
-    offset = len(hiding_spots)
-    for i, route in enumerate(escape_routes, offset + 1):
-        console.print(f"  [{i}] {route['emoji']} [bold]{route['name']}[/bold]")
-        console.print(f"      [dim]{route['description']}[/dim]")
-        all_options.append(route)
-
-    console.print()
-
-    # Get player choice
-    while True:
-        choice = console.input(f"[bold]Select option (1-{len(all_options)}):[/bold] ").strip()
-        try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(all_options):
-                return all_options[idx]
-        except ValueError:
-            pass
-        console.print(f"[red]Invalid choice. Enter 1-{len(all_options)}.[/red]")
+    # Use arrow-key selection
+    return select_option(choices, "Select your escape:")
 
 
 def print_escape_result(player, result: dict, escape_options: list = None):
