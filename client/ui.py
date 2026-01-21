@@ -5,8 +5,6 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich.layout import Layout
-from rich.live import Live
 from rich import box
 from typing import List, Optional, Dict, Any
 
@@ -229,7 +227,7 @@ def print_game_over(state: GameState):
         print_header("GAME OVER", "The Seeker wins!")
         console.print("\n[red]All players have been eliminated![/red]\n")
     else:
-        winner = state.winner
+        winner = state.winner or {}
         print_header("GAME OVER", f"{winner.get('username', 'Unknown')} wins!")
         console.print(f"\n[green]Final score: {winner.get('score', 0)} points[/green]\n")
 
