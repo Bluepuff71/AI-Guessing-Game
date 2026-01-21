@@ -276,9 +276,14 @@ class TestCheckForUpdate:
     def test_update_available_and_downloaded(self, monkeypatch, tmp_path):
         """Test successful update download."""
         import version
+
+        # Create a mock current executable in tmp_path
+        current_exe = tmp_path / "LootRun.exe"
+        current_exe.write_bytes(b"current exe")
+
         monkeypatch.setattr(version, "get_version", lambda: "v2026.01.19")
         monkeypatch.setattr(version, "_get_platform", lambda: "Windows")
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(version, "_get_current_executable", lambda: current_exe)
 
         # Mock API response with newer version
         release_data = {
@@ -311,6 +316,7 @@ class TestCheckForUpdate:
 
         assert downloaded is True
         assert "v2026.01.20" in message
+        # File should be downloaded next to current executable
         assert (tmp_path / "LootRun_new.exe").exists()
 
     def test_network_error(self, monkeypatch):
@@ -455,9 +461,14 @@ class TestCheckForUpdate:
     def test_dev_version_gets_update(self, monkeypatch, tmp_path):
         """Test that dev version always gets updates."""
         import version
+
+        # Create a mock current executable in tmp_path
+        current_exe = tmp_path / "LootRun.exe"
+        current_exe.write_bytes(b"current exe")
+
         monkeypatch.setattr(version, "get_version", lambda: "dev")
         monkeypatch.setattr(version, "_get_platform", lambda: "Windows")
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(version, "_get_current_executable", lambda: current_exe)
 
         release_data = {
             "tag_name": "v2026.01.01",
