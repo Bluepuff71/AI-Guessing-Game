@@ -105,13 +105,11 @@ def create_server_fixture(port: int):
     def server_fixture():
         kill_process_on_port(port)
 
-        # Use DEVNULL for stdout/stderr to prevent pipe buffer blocking
-        # This is critical for CI environments where the server may output
-        # deprecation warnings that fill the pipe buffer before we read it
+        # Capture stderr to diagnose startup failures
         proc = subprocess.Popen(
             [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", str(port)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
         )
 
         # Wait for server to be ready (with longer timeout for CI)
@@ -120,7 +118,13 @@ def create_server_fixture(port: int):
             # Server didn't start - check if process is still running
             poll_result = proc.poll()
             if poll_result is not None:
-                error_msg = f"Server process exited with code {poll_result}"
+                # Process exited - capture stderr to understand why
+                try:
+                    _, stderr = proc.communicate(timeout=2)
+                    stderr_text = stderr.decode().strip() if stderr else "No stderr"
+                except Exception:
+                    stderr_text = "Could not capture stderr"
+                error_msg = f"Server process exited with code {poll_result}. stderr: {stderr_text}"
             else:
                 error_msg = "Server did not start accepting connections in time"
                 proc.terminate()

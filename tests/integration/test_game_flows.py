@@ -33,18 +33,23 @@ def game_server():
     port = 18900
     kill_process_on_port(port)
 
-    # Use DEVNULL for stdout/stderr to prevent pipe buffer blocking
+    # Capture stderr to diagnose startup failures
     proc = subprocess.Popen(
         [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", str(port)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
     )
 
     # Wait for server to be ready (longer timeout for CI)
     if not wait_for_server(port, timeout=15.0):
         poll_result = proc.poll()
         if poll_result is not None:
-            error_msg = f"Server process exited with code {poll_result}"
+            try:
+                _, stderr = proc.communicate(timeout=2)
+                stderr_text = stderr.decode().strip() if stderr else "No stderr"
+            except Exception:
+                stderr_text = "Could not capture stderr"
+            error_msg = f"Server process exited with code {poll_result}. stderr: {stderr_text}"
         else:
             error_msg = "Server did not start accepting connections in time"
             proc.terminate()
@@ -70,18 +75,23 @@ def game_server_18901():
     port = 18901
     kill_process_on_port(port)
 
-    # Use DEVNULL for stdout/stderr to prevent pipe buffer blocking
+    # Capture stderr to diagnose startup failures
     proc = subprocess.Popen(
         [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", str(port)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
     )
 
     # Wait for server to be ready (longer timeout for CI)
     if not wait_for_server(port, timeout=15.0):
         poll_result = proc.poll()
         if poll_result is not None:
-            error_msg = f"Server process exited with code {poll_result}"
+            try:
+                _, stderr = proc.communicate(timeout=2)
+                stderr_text = stderr.decode().strip() if stderr else "No stderr"
+            except Exception:
+                stderr_text = "Could not capture stderr"
+            error_msg = f"Server process exited with code {poll_result}. stderr: {stderr_text}"
         else:
             error_msg = "Server did not start accepting connections in time"
             proc.terminate()
