@@ -8,10 +8,7 @@ import pytest
 
 # Mark all tests in this module as slow and set a timeout
 pytestmark = [pytest.mark.slow, pytest.mark.timeout(30)]
-import subprocess
-import sys
 import time
-import json
 from unittest.mock import patch
 
 try:
@@ -26,35 +23,7 @@ from client.handler import MessageHandler
 from server.protocol import Message, ClientMessageType, ServerMessageType
 from version import VERSION
 
-
-@pytest.fixture
-def server_process_18770():
-    """Start a server on port 18770 for testing."""
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18770"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    # Wait for server to be ready
-    time.sleep(0.8)
-    yield proc
-    proc.terminate()
-    proc.wait()
-
-
-@pytest.fixture
-def server_process_18771():
-    """Start a server on port 18771 for testing."""
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18771"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    # Wait for server to be ready
-    time.sleep(0.8)
-    yield proc
-    proc.terminate()
-    proc.wait()
+# Server fixtures are provided by conftest.py
 
 
 class TestVersionValidation:

@@ -5,21 +5,17 @@ with the game server using the new NetworkThread-based architecture.
 """
 
 import pytest
-import subprocess
-import sys
 import time
 
 # Mark all tests in this module as slow and set a timeout
 pytestmark = [pytest.mark.slow, pytest.mark.timeout(30)]
 
-from typing import Dict, List, Any
-
 from client.network_thread import NetworkThread
 from client.state import GameState, ClientPhase
 from client.handler import MessageHandler
-from server.protocol import ServerMessageType
 from version import VERSION
 
+# Server fixtures are provided by conftest.py
 
 # Test timeouts
 POLL_TIMEOUT = 0.1
@@ -88,49 +84,6 @@ def poll_until(network: NetworkThread, handler: MessageHandler, condition, timeo
         if condition():
             return True
     return False
-
-
-@pytest.fixture
-def server_process_18765():
-    """Start a server on port 18765 for testing."""
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18765"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    # Wait for server to be ready
-    time.sleep(0.8)
-    yield proc
-    proc.terminate()
-    proc.wait()
-
-
-@pytest.fixture
-def server_process_18766():
-    """Start a server on port 18766 for testing."""
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18766"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    time.sleep(0.8)
-    yield proc
-    proc.terminate()
-    proc.wait()
-
-
-@pytest.fixture
-def server_process_18767():
-    """Start a server on port 18767 for testing."""
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18767"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    time.sleep(0.8)
-    yield proc
-    proc.terminate()
-    proc.wait()
 
 
 class TestClientServerConnection:

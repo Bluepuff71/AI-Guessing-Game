@@ -15,6 +15,8 @@ from client.state import GameState, ClientPhase
 from client.handler import MessageHandler
 from version import VERSION
 
+from .conftest import kill_process_on_port
+
 
 # Mark all tests in this module as slow and set a timeout
 pytestmark = [pytest.mark.slow, pytest.mark.timeout(30)]
@@ -27,30 +29,44 @@ GAME_TIMEOUT = 30.0
 
 @pytest.fixture
 def game_server():
-    """Start real server for integration tests."""
+    """Start real server for integration tests on port 18900."""
+    port = 18900
+    kill_process_on_port(port)
+
     proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18900"],
+        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", str(port)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
-    time.sleep(1.0)  # Wait for startup - increased for reliability
-    yield "ws://127.0.0.1:18900"
+    time.sleep(1.0)  # Wait for startup
+    yield f"ws://127.0.0.1:{port}"
     proc.terminate()
-    proc.wait(timeout=5)
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
 
 
 @pytest.fixture
 def game_server_18901():
-    """Start real server on alternate port for tests needing multiple servers."""
+    """Start real server on port 18901 for tests needing multiple servers."""
+    port = 18901
+    kill_process_on_port(port)
+
     proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18901"],
+        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", str(port)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
-    time.sleep(1.0)  # Wait for startup - increased for reliability
-    yield "ws://127.0.0.1:18901"
+    time.sleep(1.0)  # Wait for startup
+    yield f"ws://127.0.0.1:{port}"
     proc.terminate()
-    proc.wait(timeout=5)
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
 
 
 def connect_and_join(

@@ -412,6 +412,22 @@ class GameServer:
             await self.send_to_player(player_id, msg)
 
 
+def check_port_available(host: str, port: int) -> bool:
+    """Check if a port is available for binding.
+
+    Returns True if available, False if in use.
+    """
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind((host if host != "0.0.0.0" else "127.0.0.1", port))
+        sock.close()
+        return True
+    except OSError:
+        sock.close()
+        return False
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(description="LOOT RUN Multiplayer Server")
@@ -422,6 +438,14 @@ def main():
     if not WEBSOCKETS_AVAILABLE:
         print("ERROR: websockets library not installed.")
         print("Install with: pip install websockets")
+        return 1
+
+    # Check if port is already in use
+    if not check_port_available(args.host, args.port):
+        print(f"ERROR: Port {args.port} is already in use.")
+        print("Another server may be running. Try:")
+        print(f"  1. Stop the other server")
+        print(f"  2. Use a different port: --port {args.port + 1}")
         return 1
 
     server = GameServer(host=args.host, port=args.port)
