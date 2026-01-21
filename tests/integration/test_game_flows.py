@@ -172,11 +172,11 @@ class TestSinglePlayerCompleteFlow:
             # Ready up to start game
             network.send("READY", {})
 
-            # Wait for shop phase
+            # Wait for choosing phase (round 1 skips shop)
             assert poll_until(
                 network, handler,
-                lambda: state.phase == ClientPhase.SHOP
-            ), "Game did not start (no SHOP phase)"
+                lambda: state.phase == ClientPhase.CHOOSING
+            ), "Game did not start (no CHOOSING phase)"
 
             # Play through rounds
             rounds_played = 0
@@ -185,7 +185,7 @@ class TestSinglePlayerCompleteFlow:
             while rounds_played < max_rounds and state.phase != ClientPhase.GAME_OVER:
                 # Handle based on current phase
                 if state.phase == ClientPhase.SHOP:
-                    # Skip shop
+                    # Skip shop (only happens in round 2+)
                     network.send("SKIP_SHOP", {})
                     poll_until(
                         network, handler,
@@ -293,10 +293,10 @@ class TestSinglePlayerCompleteFlow:
             # Ready up
             network.send("READY", {})
 
-            # Wait for game start
+            # Wait for game start (round 1 skips shop, goes to choosing)
             assert poll_until(
                 network, handler,
-                lambda: state.phase == ClientPhase.SHOP
+                lambda: state.phase == ClientPhase.CHOOSING
             ), "Game did not start"
 
             # Play rounds with scripted choices
@@ -306,7 +306,7 @@ class TestSinglePlayerCompleteFlow:
 
                 # Handle based on current phase
                 if state.phase == ClientPhase.SHOP:
-                    # Skip shop
+                    # Skip shop (only happens in round 2+)
                     network.send("SKIP_SHOP", {})
                     poll_until(
                         network, handler,
@@ -427,7 +427,7 @@ class TestHostOnlineFlow:
                 network, handler,
                 lambda: (state.players.get(player_id) and
                         state.players[player_id].ready) or
-                        state.phase == ClientPhase.SHOP,  # May auto-start
+                        state.phase == ClientPhase.CHOOSING,  # May auto-start (round 1 skips shop)
                 timeout=5.0
             )
 
@@ -462,10 +462,10 @@ class TestHostOnlineFlow:
             # Ready up - should start game immediately
             network.send("READY", {})
 
-            # Wait for game to start
+            # Wait for game to start (round 1 skips shop, goes to choosing)
             assert poll_until(
                 network, handler,
-                lambda: state.phase == ClientPhase.SHOP
+                lambda: state.phase == ClientPhase.CHOOSING
             ), "Game should start when host readies"
 
             assert state.round_num >= 1, "Game should be in round 1+"
@@ -669,11 +669,11 @@ class TestHotSeatFlow:
             for pid, network in networks.items():
                 network.send("READY", {})
 
-            # Wait for game to start
+            # Wait for game to start (round 1 skips shop, goes to choosing)
             first_network = list(networks.values())[0]
             assert poll_until(
                 first_network, handler,
-                lambda: state.phase == ClientPhase.SHOP
+                lambda: state.phase == ClientPhase.CHOOSING
             ), "Game should start when all ready"
 
             # Game started
@@ -716,23 +716,12 @@ class TestHotSeatFlow:
             for network in networks.values():
                 network.send("READY", {})
 
-            # Wait for shop phase
+            # Wait for choosing phase (round 1 skips shop)
             first_network = list(networks.values())[0]
             poll_until(
                 first_network, handler,
-                lambda: state.phase == ClientPhase.SHOP,
-                timeout=10.0
-            )
-
-            # Skip shop for all
-            for network in networks.values():
-                network.send("SKIP_SHOP", {})
-
-            # Wait for choosing phase
-            poll_until(
-                first_network, handler,
                 lambda: state.phase == ClientPhase.CHOOSING,
-                timeout=5.0
+                timeout=10.0
             )
 
             # Each player chooses different location
@@ -850,13 +839,7 @@ class TestErrorHandling:
             # Ready up
             network.send("READY", {})
 
-            poll_until(
-                network, handler,
-                lambda: state.phase == ClientPhase.SHOP
-            )
-
-            # Skip shop
-            network.send("SKIP_SHOP", {})
+            # Wait for choosing phase (round 1 skips shop)
             poll_until(
                 network, handler,
                 lambda: state.phase == ClientPhase.CHOOSING
