@@ -1,42 +1,15 @@
 """Integration tests for NetworkThread with actual server connection."""
 
-import subprocess
-import sys
-import time
-
 import pytest
 
 from client.network_thread import NetworkThread
 from version import VERSION
 
 
-@pytest.fixture
-def server_process_18780():
-    """Start a server on port 18780 for testing."""
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18780"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    # Wait for server to be ready
-    time.sleep(0.8)
-    yield proc
-    proc.terminate()
-    proc.wait()
+# Mark all tests in this module as slow and set a timeout
+pytestmark = [pytest.mark.slow, pytest.mark.timeout(30)]
 
-
-@pytest.fixture
-def server_process_18781():
-    """Start a server on port 18781 for testing."""
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18781"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    time.sleep(0.8)
-    yield proc
-    proc.terminate()
-    proc.wait()
+# Server fixtures are provided by conftest.py
 
 
 class TestNetworkThreadConnection:

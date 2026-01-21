@@ -5,17 +5,17 @@ with the game server using the new NetworkThread-based architecture.
 """
 
 import pytest
-import subprocess
-import sys
 import time
-from typing import Dict, List, Any
+
+# Mark all tests in this module as slow and set a timeout
+pytestmark = [pytest.mark.slow, pytest.mark.timeout(30)]
 
 from client.network_thread import NetworkThread
 from client.state import GameState, ClientPhase
 from client.handler import MessageHandler
-from server.protocol import ServerMessageType
 from version import VERSION
 
+# Server fixtures are provided by conftest.py
 
 # Test timeouts
 POLL_TIMEOUT = 0.1
@@ -84,49 +84,6 @@ def poll_until(network: NetworkThread, handler: MessageHandler, condition, timeo
         if condition():
             return True
     return False
-
-
-@pytest.fixture
-def server_process_18765():
-    """Start a server on port 18765 for testing."""
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18765"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    # Wait for server to be ready
-    time.sleep(0.8)
-    yield proc
-    proc.terminate()
-    proc.wait()
-
-
-@pytest.fixture
-def server_process_18766():
-    """Start a server on port 18766 for testing."""
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18766"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    time.sleep(0.8)
-    yield proc
-    proc.terminate()
-    proc.wait()
-
-
-@pytest.fixture
-def server_process_18767():
-    """Start a server on port 18767 for testing."""
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", "18767"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    time.sleep(0.8)
-    yield proc
-    proc.terminate()
-    proc.wait()
 
 
 class TestClientServerConnection:
@@ -212,17 +169,17 @@ class TestClientServerGameFlow:
             # Ready up to start game
             network.send("READY", {})
 
-            # Wait for game to start (shop phase)
-            poll_until(network, handler, lambda: state.phase == ClientPhase.SHOP)
+            # Wait for game to start (round 1 skips shop, goes to choosing)
+            poll_until(network, handler, lambda: state.phase == ClientPhase.CHOOSING)
 
-            assert state.phase == ClientPhase.SHOP
+            assert state.phase == ClientPhase.CHOOSING
             assert state.round_num == 1
             assert len(state.locations) > 0
         finally:
             network.stop()
 
-    def test_shop_skip_to_choosing(self, server_process_18766):
-        """Test that skipping shop moves to choosing phase."""
+    def test_round_one_skips_shop(self, server_process_18766):
+        """Test that round 1 skips shop phase and goes directly to choosing."""
         network = NetworkThread()
         state = GameState()
         handler = MessageHandler(state)
@@ -233,17 +190,10 @@ class TestClientServerGameFlow:
 
             network.send("READY", {})
 
-            # Wait for shop phase
-            poll_until(network, handler, lambda: state.phase == ClientPhase.SHOP)
-            assert state.phase == ClientPhase.SHOP
-
-            # Skip shop
-            network.send("SKIP_SHOP", {})
-
-            # Wait for choosing phase
+            # Round 1 skips shop and goes directly to choosing
             poll_until(network, handler, lambda: state.phase == ClientPhase.CHOOSING)
-
             assert state.phase == ClientPhase.CHOOSING
+            assert state.round_num == 1
         finally:
             network.stop()
 
@@ -259,11 +209,7 @@ class TestClientServerGameFlow:
 
             network.send("READY", {})
 
-            # Wait for shop, then skip
-            poll_until(network, handler, lambda: state.phase == ClientPhase.SHOP)
-            network.send("SKIP_SHOP", {})
-
-            # Wait for choosing phase
+            # Wait for choosing phase (round 1 skips shop)
             poll_until(network, handler, lambda: state.phase == ClientPhase.CHOOSING)
 
             # Submit location choice (first location)
@@ -350,7 +296,7 @@ class TestMultipleClients:
             network1.send("READY", {})
             network2.send("READY", {})
 
-            # Poll both until game starts
+            # Poll both until game starts (round 1 skips shop, goes to choosing)
             for _ in range(100):
                 msg1 = network1.poll(timeout=0.05)
                 if msg1 and msg1["type"] == "SERVER_MESSAGE":
@@ -360,12 +306,12 @@ class TestMultipleClients:
                 if msg2 and msg2["type"] == "SERVER_MESSAGE":
                     handler2.handle(msg2["message_type"], msg2["data"])
 
-                if state1.phase == ClientPhase.SHOP and state2.phase == ClientPhase.SHOP:
+                if state1.phase == ClientPhase.CHOOSING and state2.phase == ClientPhase.CHOOSING:
                     break
 
-            # Both should be in shop phase
-            assert state1.phase == ClientPhase.SHOP
-            assert state2.phase == ClientPhase.SHOP
+            # Both should be in choosing phase (round 1 skips shop)
+            assert state1.phase == ClientPhase.CHOOSING
+            assert state2.phase == ClientPhase.CHOOSING
             assert state1.round_num == 1
             assert state2.round_num == 1
         finally:

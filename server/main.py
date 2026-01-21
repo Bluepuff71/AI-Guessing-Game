@@ -30,7 +30,8 @@ from server.protocol import (
     parse_join_message, parse_reconnect_message, parse_location_choice_message,
     parse_escape_choice_message, parse_shop_purchase_message
 )
-from server.engine import ServerGameEngine
+from server.engine_v2 import EventDrivenGameEngine
+from server.events import GameEvent, GameEventType
 from version import VERSION
 
 
@@ -63,7 +64,7 @@ class GameServer:
         self.websocket_to_player: Dict[WebSocketServerProtocol, str] = {}
 
         # Game management
-        self.games: Dict[str, ServerGameEngine] = {}  # game_id -> engine
+        self.games: Dict[str, EventDrivenGameEngine] = {}  # game_id -> engine
         self.player_to_game: Dict[str, str] = {}  # player_id -> game_id
 
         # Lobby (players waiting to be matched or creating games)
@@ -77,7 +78,12 @@ class GameServer:
             return
 
         print(f"Starting LOOT RUN server on ws://{self.host}:{self.port}")
-        async with websockets.serve(self.handle_connection, self.host, self.port):
+        # Use reuse_address=True to allow binding to ports in TIME_WAIT state
+        # This is important for tests that rapidly start/stop servers
+        async with websockets.serve(
+            self.handle_connection, self.host, self.port,
+            reuse_address=True
+        ):
             await asyncio.Future()  # Run forever
 
     async def handle_connection(self, websocket: WebSocketServerProtocol):
@@ -185,19 +191,29 @@ class GameServer:
         """Find an existing game to join or create a new one."""
         # Look for a game that hasn't started yet and has room
         for game_id, game in self.games.items():
-            if game.current_phase.value == "lobby" and len(game.players) < 6:
+            if game.phase.value == "lobby" and len(game.players) < 6:
                 # Join this game
-                await game.add_player(player_id, username, profile_id)
+                event = GameEvent(
+                    type=GameEventType.PLAYER_JOIN,
+                    player_id=player_id,
+                    data={"username": username, "profile_id": profile_id}
+                )
+                await game.handle_event(event)
                 return game_id
 
         # Create new game
         game_id = str(uuid.uuid4())[:8]
-        game = ServerGameEngine(
+        game = EventDrivenGameEngine(
             game_id=game_id,
             broadcast=lambda msg: self.broadcast_to_game(game_id, msg),
             send_to_player=lambda pid, msg: self.send_to_player(pid, msg)
         )
-        await game.add_player(player_id, username, profile_id)
+        event = GameEvent(
+            type=GameEventType.PLAYER_JOIN,
+            player_id=player_id,
+            data={"username": username, "profile_id": profile_id}
+        )
+        await game.handle_event(event)
         self.games[game_id] = game
 
         return game_id
@@ -213,7 +229,7 @@ class GameServer:
             return
 
         game = self.games[game_id]
-        player = game.get_player(player_id)
+        player = game.players.get(player_id)
 
         if not player:
             await self.send_to_websocket(websocket, error_message("PLAYER_NOT_FOUND", "Player not found in game"))
@@ -248,9 +264,13 @@ class GameServer:
             return
 
         game = self.games[game_id]
-        await game.set_player_ready(player_id, ready)
+        event = GameEvent(
+            type=GameEventType.PLAYER_READY if ready else GameEventType.PLAYER_UNREADY,
+            player_id=player_id
+        )
+        await game.handle_event(event)
 
-        player = game.get_player(player_id)
+        player = game.players.get(player_id)
         if player:
             await self.broadcast_to_game(game_id, player_ready_message(
                 player_id=player_id,
@@ -260,7 +280,7 @@ class GameServer:
 
         # Check if all ready and can start
         if game.all_players_ready():
-            await game.start_game()
+            await game.handle_event(GameEvent(type=GameEventType.GAME_START))
 
     async def handle_location_choice(self, player_id: str, data: dict):
         """Handle LOCATION_CHOICE message."""
@@ -270,7 +290,12 @@ class GameServer:
 
         parsed = parse_location_choice_message(data)
         game = self.games[game_id]
-        await game.submit_location_choice(player_id, parsed["location_index"])
+        event = GameEvent(
+            type=GameEventType.LOCATION_CHOICE,
+            player_id=player_id,
+            data={"location_index": parsed["location_index"]}
+        )
+        await game.handle_event(event)
 
     async def handle_escape_choice(self, player_id: str, data: dict):
         """Handle ESCAPE_CHOICE message."""
@@ -280,7 +305,12 @@ class GameServer:
 
         parsed = parse_escape_choice_message(data)
         game = self.games[game_id]
-        await game.submit_escape_choice(player_id, parsed["option_id"])
+        event = GameEvent(
+            type=GameEventType.ESCAPE_CHOICE,
+            player_id=player_id,
+            data={"option_id": parsed["option_id"]}
+        )
+        await game.handle_event(event)
 
     async def handle_shop_purchase(self, player_id: str, data: dict):
         """Handle SHOP_PURCHASE message."""
@@ -290,7 +320,12 @@ class GameServer:
 
         parsed = parse_shop_purchase_message(data)
         game = self.games[game_id]
-        await game.handle_shop_purchase(player_id, parsed["passive_id"])
+        event = GameEvent(
+            type=GameEventType.SHOP_PURCHASE,
+            player_id=player_id,
+            data={"passive_id": parsed["passive_id"]}
+        )
+        await game.handle_event(event)
 
     async def handle_skip_shop(self, player_id: str):
         """Handle SKIP_SHOP message."""
@@ -299,7 +334,11 @@ class GameServer:
             return
 
         game = self.games[game_id]
-        await game.handle_shop_done(player_id)
+        event = GameEvent(
+            type=GameEventType.SHOP_SKIP,
+            player_id=player_id
+        )
+        await game.handle_event(event)
 
     async def handle_disconnect(self, player_id: str):
         """Handle player disconnection."""
@@ -310,7 +349,11 @@ class GameServer:
         game_id = client.game_id
         if game_id and game_id in self.games:
             game = self.games[game_id]
-            await game.remove_player(player_id)
+            event = GameEvent(
+                type=GameEventType.PLAYER_LEAVE,
+                player_id=player_id
+            )
+            await game.handle_event(event)
 
             # Notify others
             await self.broadcast_to_game(game_id, player_left_message(
@@ -353,7 +396,7 @@ class GameServer:
             if player_id != exclude:
                 await self.send_to_player(player_id, message)
 
-    async def send_lobby_state(self, game: ServerGameEngine):
+    async def send_lobby_state(self, game: EventDrivenGameEngine):
         """Send lobby state to all players in a game."""
         players_list = [p.to_public_dict() for p in game.players.values()]
         host_id = game.player_order[0] if game.player_order else ""
@@ -374,6 +417,24 @@ class GameServer:
             await self.send_to_player(player_id, msg)
 
 
+def check_port_available(host: str, port: int) -> bool:
+    """Check if a port is available for binding.
+
+    Returns True if available, False if in use by another process.
+    Uses SO_REUSEADDR to allow binding to ports in TIME_WAIT state.
+    """
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind((host if host != "0.0.0.0" else "127.0.0.1", port))
+        sock.close()
+        return True
+    except OSError:
+        sock.close()
+        return False
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(description="LOOT RUN Multiplayer Server")
@@ -384,6 +445,14 @@ def main():
     if not WEBSOCKETS_AVAILABLE:
         print("ERROR: websockets library not installed.")
         print("Install with: pip install websockets")
+        return 1
+
+    # Check if port is already in use
+    if not check_port_available(args.host, args.port):
+        print(f"ERROR: Port {args.port} is already in use.")
+        print("Another server may be running. Try:")
+        print(f"  1. Stop the other server")
+        print(f"  2. Use a different port: --port {args.port + 1}")
         return 1
 
     server = GameServer(host=args.host, port=args.port)
