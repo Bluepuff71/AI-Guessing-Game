@@ -112,8 +112,14 @@ class GameState:
         self.active_events.clear()
         self.local_player_ids.clear()
         self.current_local_player_index = 0
+        self.timer_seconds = 0
+        self.previous_ai_location = None
         self.last_round_results = None
         self.last_escape_result = None
+        self.available_passives.clear()
+        self.escape_options.clear()
+        self.caught_location = None
+        self.caught_points = 0
         self.winner = None
         self.ai_wins = False
         self.final_standings.clear()
