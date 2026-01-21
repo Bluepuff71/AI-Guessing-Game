@@ -8,6 +8,10 @@ import pytest
 import subprocess
 import sys
 import time
+
+# Mark all tests in this module as slow and set a timeout
+pytestmark = [pytest.mark.slow, pytest.mark.timeout(30)]
+
 from typing import Dict, List, Any
 
 from client.network_thread import NetworkThread

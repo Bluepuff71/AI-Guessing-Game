@@ -5,6 +5,9 @@ Tests that the server properly validates client version during join.
 
 import asyncio
 import pytest
+
+# Mark all tests in this module as slow and set a timeout
+pytestmark = [pytest.mark.slow, pytest.mark.timeout(30)]
 import subprocess
 import sys
 import time

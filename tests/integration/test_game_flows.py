@@ -16,8 +16,8 @@ from client.handler import MessageHandler
 from version import VERSION
 
 
-# Mark all tests in this module as slow
-pytestmark = [pytest.mark.slow]
+# Mark all tests in this module as slow and set a timeout
+pytestmark = [pytest.mark.slow, pytest.mark.timeout(30)]
 
 # Test timeouts
 POLL_TIMEOUT = 0.1
@@ -183,8 +183,9 @@ class TestSinglePlayerCompleteFlow:
             max_rounds = 10
 
             while rounds_played < max_rounds and state.phase != ClientPhase.GAME_OVER:
-                # Skip shop
+                # Handle based on current phase
                 if state.phase == ClientPhase.SHOP:
+                    # Skip shop
                     network.send("SKIP_SHOP", {})
                     poll_until(
                         network, handler,
@@ -192,31 +193,47 @@ class TestSinglePlayerCompleteFlow:
                         timeout=5.0
                     )
 
-                # Make location choice (cycle through locations)
-                if state.phase == ClientPhase.CHOOSING:
+                elif state.phase == ClientPhase.CHOOSING:
+                    # Make location choice (cycle through locations)
                     location_index = rounds_played % max(1, len(state.locations))
                     network.send("LOCATION_CHOICE", {"location_index": location_index})
 
-                    # Wait for round result or escape phase
+                    # Wait for round result
                     poll_until(
                         network, handler,
-                        lambda: handler.last_round_result is not None or state.phase == ClientPhase.ESCAPE,
+                        lambda: handler.last_round_result is not None,
                         timeout=10.0
                     )
 
-                    # Handle escape if caught
-                    if state.phase == ClientPhase.ESCAPE and state.escape_options:
-                        # Choose first escape option
-                        option_id = state.escape_options[0].get("id", "")
-                        network.send("ESCAPE_CHOICE", {"option_id": option_id})
+                    # Check if we were caught (need escape)
+                    was_caught = False
+                    if handler.last_round_result:
+                        for result in handler.last_round_result.get("player_results", []):
+                            if result.get("player_id") == state.player_id:
+                                was_caught = result.get("escape_required", False)
+                                break
 
-                        # Wait for escape result
+                    # Handle escape if caught
+                    if was_caught:
+                        # Wait for ESCAPE phase
                         poll_until(
                             network, handler,
-                            lambda: handler.last_escape_result is not None,
+                            lambda: state.phase == ClientPhase.ESCAPE,
                             timeout=5.0
                         )
-                        handler.last_escape_result = None
+
+                        if state.escape_options:
+                            # Choose first escape option
+                            option_id = state.escape_options[0].get("id", "")
+                            network.send("ESCAPE_CHOICE", {"option_id": option_id})
+
+                            # Wait for escape result
+                            poll_until(
+                                network, handler,
+                                lambda: handler.last_escape_result is not None,
+                                timeout=5.0
+                            )
+                            handler.last_escape_result = None
 
                     rounds_played += 1
                     handler.last_round_result = None
@@ -225,8 +242,19 @@ class TestSinglePlayerCompleteFlow:
                     poll_until(
                         network, handler,
                         lambda: state.phase in [ClientPhase.SHOP, ClientPhase.GAME_OVER],
-                        timeout=5.0
+                        timeout=10.0
                     )
+
+                else:
+                    # Transitional phase (ESCAPE, RESULTS, WAITING, etc.)
+                    # Poll until we reach an actionable phase
+                    if not poll_until(
+                        network, handler,
+                        lambda: state.phase in [ClientPhase.SHOP, ClientPhase.CHOOSING, ClientPhase.GAME_OVER],
+                        timeout=10.0
+                    ):
+                        # If we timeout in a transitional phase, fail with clear message
+                        pytest.fail(f"Test stuck in phase {state.phase} after {rounds_played} rounds")
 
             # Verify we played at least one round
             assert rounds_played >= 1, "Should have played at least one round"
@@ -276,8 +304,9 @@ class TestSinglePlayerCompleteFlow:
                 if state.phase == ClientPhase.GAME_OVER:
                     break
 
-                # Skip shop
+                # Handle based on current phase
                 if state.phase == ClientPhase.SHOP:
+                    # Skip shop
                     network.send("SKIP_SHOP", {})
                     poll_until(
                         network, handler,
@@ -285,29 +314,45 @@ class TestSinglePlayerCompleteFlow:
                         timeout=5.0
                     )
 
-                # Make scripted choice
-                if state.phase == ClientPhase.CHOOSING:
+                elif state.phase == ClientPhase.CHOOSING:
+                    # Make scripted choice
                     # Ensure choice is valid for available locations
                     valid_choice = choice % max(1, len(state.locations))
                     network.send("LOCATION_CHOICE", {"location_index": valid_choice})
 
-                    # Wait for result
+                    # Wait for round result
                     poll_until(
                         network, handler,
-                        lambda: handler.last_round_result is not None or state.phase == ClientPhase.ESCAPE,
+                        lambda: handler.last_round_result is not None,
                         timeout=10.0
                     )
 
-                    # Handle escape if needed
-                    if state.phase == ClientPhase.ESCAPE and state.escape_options:
-                        option_id = state.escape_options[0].get("id", "")
-                        network.send("ESCAPE_CHOICE", {"option_id": option_id})
+                    # Check if we were caught (need escape)
+                    was_caught = False
+                    if handler.last_round_result:
+                        for result in handler.last_round_result.get("player_results", []):
+                            if result.get("player_id") == state.player_id:
+                                was_caught = result.get("escape_required", False)
+                                break
+
+                    # Handle escape if caught
+                    if was_caught:
+                        # Wait for ESCAPE phase
                         poll_until(
                             network, handler,
-                            lambda: handler.last_escape_result is not None,
+                            lambda: state.phase == ClientPhase.ESCAPE,
                             timeout=5.0
                         )
-                        handler.last_escape_result = None
+
+                        if state.escape_options:
+                            option_id = state.escape_options[0].get("id", "")
+                            network.send("ESCAPE_CHOICE", {"option_id": option_id})
+                            poll_until(
+                                network, handler,
+                                lambda: handler.last_escape_result is not None,
+                                timeout=5.0
+                            )
+                            handler.last_escape_result = None
 
                     handler.last_round_result = None
 
@@ -315,8 +360,17 @@ class TestSinglePlayerCompleteFlow:
                     poll_until(
                         network, handler,
                         lambda: state.phase in [ClientPhase.SHOP, ClientPhase.GAME_OVER],
-                        timeout=5.0
+                        timeout=10.0
                     )
+
+                else:
+                    # Transitional phase - wait for actionable state
+                    if not poll_until(
+                        network, handler,
+                        lambda: state.phase in [ClientPhase.SHOP, ClientPhase.CHOOSING, ClientPhase.GAME_OVER],
+                        timeout=10.0
+                    ):
+                        pytest.fail(f"Test stuck in phase {state.phase} at round {round_num}")
 
             # Verify game progressed
             assert state.round_num >= 1, "Game should have advanced rounds"
@@ -689,13 +743,27 @@ class TestHotSeatFlow:
             # Wait for round result
             poll_until(
                 first_network, handler,
-                lambda: handler.last_round_result is not None or state.phase == ClientPhase.ESCAPE,
+                lambda: handler.last_round_result is not None,
                 timeout=10.0
             )
 
-            # Handle escape for all caught players
-            if state.phase == ClientPhase.ESCAPE:
-                for pid in state.local_player_ids:
+            # Check if any local players were caught
+            caught_players = []
+            if handler.last_round_result:
+                for result in handler.last_round_result.get("player_results", []):
+                    if result.get("escape_required") and result.get("player_id") in state.local_player_ids:
+                        caught_players.append(result.get("player_id"))
+
+            # Handle escape for caught players
+            if caught_players:
+                # Wait for ESCAPE phase
+                poll_until(
+                    first_network, handler,
+                    lambda: state.phase == ClientPhase.ESCAPE,
+                    timeout=5.0
+                )
+
+                for pid in caught_players:
                     if pid in networks and state.escape_options:
                         option_id = state.escape_options[0].get("id", "")
                         networks[pid].send("ESCAPE_CHOICE", {"option_id": option_id})
