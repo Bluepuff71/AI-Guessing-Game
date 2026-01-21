@@ -10,6 +10,7 @@ from typing import List, Optional, Dict, Any
 import questionary
 
 from client.state import GameState, PlayerInfo, LocationInfo, ClientPhase
+from version import VERSION
 
 
 console = Console()
@@ -31,7 +32,7 @@ def print_header(title: str, subtitle: str = ""):
 def print_main_menu() -> str:
     """Print main menu and get choice using arrow key selection."""
     clear_screen()
-    print_header("LOOT RUN", "Multiplayer Edition")
+    print_header(f"LOOT RUN          [{VERSION}]", "Multiplayer Edition")
     console.print()
 
     choices = [
