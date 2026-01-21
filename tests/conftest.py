@@ -505,3 +505,299 @@ def mock_questionary(monkeypatch):
         return_values.append(value)
 
     return set_return_value
+
+
+# ============================================================================
+# UI Testing Fixtures
+# ============================================================================
+
+
+@pytest.fixture
+def mock_ui_inputs(monkeypatch):
+    """Fixture to script questionary inputs for UI testing.
+
+    Usage:
+        def test_something(mock_ui_inputs):
+            mock_ui_inputs(["option1", "option2", "text input"])
+            # Now questionary.select() and questionary.text() will return
+            # these values in sequence
+
+    Returns:
+        A function that accepts a list of responses to script.
+    """
+    responses = []
+    call_index = [0]
+
+    def scripted_select(*args, **kwargs):
+        mock = MagicMock()
+        if call_index[0] < len(responses):
+            mock.ask.return_value = responses[call_index[0]]
+            call_index[0] += 1
+        else:
+            mock.ask.return_value = None
+        return mock
+
+    monkeypatch.setattr("questionary.select", scripted_select)
+    monkeypatch.setattr("questionary.text", scripted_select)
+
+    def set_responses(resp_list):
+        """Set the sequence of responses for questionary calls."""
+        responses.clear()
+        responses.extend(resp_list)
+        call_index[0] = 0
+
+    return set_responses
+
+
+@pytest.fixture
+def mock_network(monkeypatch):
+    """Mock NetworkThread with scripted poll responses.
+
+    Usage:
+        def test_something(mock_network):
+            net = mock_network([
+                {"type": "CONNECTED"},
+                {"type": "SERVER_MESSAGE", "message_type": "GAME_STATE", "data": {...}},
+            ])
+            # net.poll() will return these messages in sequence
+            # net.start() and net.stop() are no-ops
+            # net.send() records all sent messages in net.sent_messages
+
+    Returns:
+        A function that accepts a list of poll responses and returns a mock NetworkThread.
+    """
+    def create_mock_network(poll_responses=None):
+        """Create a mock NetworkThread with the given poll responses."""
+        if poll_responses is None:
+            poll_responses = []
+
+        mock_net = MagicMock()
+        poll_index = [0]
+        mock_net.sent_messages = []
+        mock_net._is_running = False
+
+        def mock_poll(timeout=0.1):
+            if poll_index[0] < len(poll_responses):
+                msg = poll_responses[poll_index[0]]
+                poll_index[0] += 1
+                return msg
+            return None
+
+        def mock_send(message_type, data):
+            mock_net.sent_messages.append({
+                "message_type": message_type,
+                "data": data
+            })
+
+        def mock_start(url):
+            mock_net._is_running = True
+            return True
+
+        def mock_stop():
+            mock_net._is_running = False
+
+        mock_net.poll = mock_poll
+        mock_net.send = mock_send
+        mock_net.start = mock_start
+        mock_net.stop = mock_stop
+        mock_net.is_running = property(lambda self: mock_net._is_running)
+
+        # Add method to add more responses dynamically
+        def add_responses(new_responses):
+            poll_responses.extend(new_responses)
+
+        mock_net.add_responses = add_responses
+
+        return mock_net
+
+    return create_mock_network
+
+
+@pytest.fixture
+def mock_game_state():
+    """Factory to create GameState with configurable players, locations, and phases.
+
+    Usage:
+        def test_something(mock_game_state):
+            state = mock_game_state(
+                phase=ClientPhase.CHOOSING,
+                players=[
+                    {"username": "Alice", "points": 50},
+                    {"username": "Bob", "points": 30},
+                ],
+                locations=[
+                    {"name": "Store", "emoji": "🏪", "min_points": 5, "max_points": 10},
+                ],
+                round_num=3
+            )
+
+    Returns:
+        A factory function that creates configured GameState instances.
+    """
+    from client.state import GameState, PlayerInfo, LocationInfo, ClientPhase
+
+    def create_game_state(
+        phase: ClientPhase = ClientPhase.MAIN_MENU,
+        connected: bool = True,
+        player_id: str = "player_1",
+        game_id: str = "test_game",
+        round_num: int = 1,
+        players: List[Dict] = None,
+        locations: List[Dict] = None,
+        active_events: List[Dict] = None,
+        local_player_ids: List[str] = None,
+        timer_seconds: int = 30,
+        previous_ai_location: str = None,
+        available_passives: List[Dict] = None,
+        escape_options: List[Dict] = None,
+        caught_location: str = None,
+        caught_points: int = 0,
+    ) -> GameState:
+        """Create a GameState with the specified configuration."""
+        state = GameState()
+        state.connected = connected
+        state.player_id = player_id
+        state.game_id = game_id
+        state.phase = phase
+        state.round_num = round_num
+        state.timer_seconds = timer_seconds
+        state.previous_ai_location = previous_ai_location
+        state.caught_location = caught_location
+        state.caught_points = caught_points
+
+        # Add players
+        if players:
+            for i, p in enumerate(players):
+                pid = p.get("player_id", f"player_{i + 1}")
+                info = PlayerInfo(
+                    player_id=pid,
+                    username=p.get("username", f"Player {i + 1}"),
+                    points=p.get("points", 0),
+                    alive=p.get("alive", True),
+                    connected=p.get("connected", True),
+                    ready=p.get("ready", False),
+                    passives=p.get("passives", []),
+                    color=p.get("color", "white"),
+                    is_local=p.get("is_local", False),
+                )
+                state.players[pid] = info
+
+        # Add locations
+        if locations:
+            for loc in locations:
+                info = LocationInfo(
+                    name=loc.get("name", "Unknown"),
+                    emoji=loc.get("emoji", "?"),
+                    min_points=loc.get("min_points", 1),
+                    max_points=loc.get("max_points", 10),
+                    event=loc.get("event"),
+                )
+                state.locations.append(info)
+
+        # Set local player IDs
+        if local_player_ids:
+            state.local_player_ids = local_player_ids
+        elif players:
+            # Default: first player is local
+            state.local_player_ids = [list(state.players.keys())[0]]
+
+        # Set active events
+        if active_events:
+            state.active_events = active_events
+
+        # Set available passives
+        if available_passives:
+            state.available_passives = available_passives
+
+        # Set escape options
+        if escape_options:
+            state.escape_options = escape_options
+
+        return state
+
+    return create_game_state
+
+
+@pytest.fixture
+def mock_console(monkeypatch):
+    """Mock rich console for output verification.
+
+    Usage:
+        def test_something(mock_console):
+            mock_console.install()
+            # ... code that prints to console ...
+            assert "expected text" in mock_console.output
+            mock_console.clear()
+
+    Returns:
+        A mock console object with output capturing.
+    """
+    from io import StringIO
+
+    class MockConsole:
+        """Mock console that captures output for verification."""
+
+        def __init__(self):
+            self._output = StringIO()
+            self._original_console = None
+            self._installed = False
+            self.print_calls = []
+            self.clear_calls = 0
+            self.input_responses = []
+            self._input_index = 0
+
+        @property
+        def output(self) -> str:
+            """Get all captured output as a string."""
+            return self._output.getvalue()
+
+        def install(self):
+            """Install the mock console into client.ui module."""
+            if self._installed:
+                return
+
+            import client.ui as ui_module
+
+            # Save original console
+            self._original_console = ui_module.console
+
+            # Create mock methods
+            mock = MagicMock()
+
+            def mock_print(*args, **kwargs):
+                # Convert args to string and store
+                text = " ".join(str(a) for a in args)
+                self._output.write(text + "\n")
+                self.print_calls.append({"args": args, "kwargs": kwargs})
+
+            def mock_clear():
+                self.clear_calls += 1
+
+            def mock_input(prompt=""):
+                self._output.write(prompt)
+                if self._input_index < len(self.input_responses):
+                    response = self.input_responses[self._input_index]
+                    self._input_index += 1
+                    return response
+                return ""
+
+            mock.print = mock_print
+            mock.clear = mock_clear
+            mock.input = mock_input
+
+            # Patch the console in ui module
+            monkeypatch.setattr(ui_module, "console", mock)
+            self._installed = True
+
+        def clear(self):
+            """Clear captured output."""
+            self._output = StringIO()
+            self.print_calls = []
+            self.clear_calls = 0
+
+        def set_input_responses(self, responses: List[str]):
+            """Set responses for console.input() calls."""
+            self.input_responses = responses
+            self._input_index = 0
+
+    return MockConsole()
