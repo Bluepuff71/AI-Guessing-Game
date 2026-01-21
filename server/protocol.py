@@ -466,7 +466,8 @@ def parse_join_message(data: Dict[str, Any]) -> Dict[str, Any]:
     """Parse JOIN message data."""
     return {
         "username": data.get("username", ""),
-        "profile_id": data.get("profile_id")
+        "profile_id": data.get("profile_id"),
+        "version": data.get("version")
     }
 
 

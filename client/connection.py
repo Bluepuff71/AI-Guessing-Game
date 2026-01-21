@@ -17,6 +17,7 @@ except ImportError:
     ConnectionClosedOK = Exception
 
 from server.protocol import Message, ClientMessageType
+from version import VERSION
 
 
 class ConnectionManager:
@@ -159,10 +160,10 @@ class ConnectionManager:
             raise RuntimeError("Not connected")
 
     async def send_join(self, username: str, profile_id: Optional[str] = None):
-        """Send JOIN message."""
+        """Send JOIN message with client version."""
         await self.send(Message(
             type=ClientMessageType.JOIN.value,
-            data={"username": username, "profile_id": profile_id}
+            data={"username": username, "profile_id": profile_id, "version": VERSION}
         ))
 
     async def send_ready(self):

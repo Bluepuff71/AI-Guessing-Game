@@ -31,6 +31,7 @@ from server.protocol import (
     parse_escape_choice_message, parse_shop_purchase_message
 )
 from server.engine import ServerGameEngine
+from version import VERSION
 
 
 @dataclass
@@ -135,6 +136,22 @@ class GameServer:
         parsed = parse_join_message(data)
         username = parsed["username"] or f"Player_{player_id[:8]}"
         profile_id = parsed.get("profile_id")
+        client_version = parsed.get("version")
+
+        # Validate client version
+        if client_version != VERSION:
+            await self.send_to_websocket(
+                websocket,
+                Message(
+                    type=ServerMessageType.ERROR.value,
+                    data={
+                        "error_type": "version_mismatch",
+                        "message": f"Version mismatch. Server: {VERSION}, Client: {client_version}"
+                    }
+                )
+            )
+            await websocket.close()
+            return
 
         # Create client
         client = ConnectedClient(

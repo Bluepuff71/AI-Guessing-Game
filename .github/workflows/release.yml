@@ -1,0 +1,207 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+
+# Ensure only one release workflow runs at a time
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  # First job: Run tests
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v --tb=short
+
+  # Second job: Generate version tag
+  generate-version:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for tags
+
+      - name: Generate version tag
+        id: version
+        run: |
+          # Generate base version from current date
+          BASE_VERSION=$(date +'%Y.%m.%d')
+          BASE_TAG="v${BASE_VERSION}"
+
+          # Check for existing tags with the same base
+          EXISTING_TAGS=$(git tag -l "${BASE_TAG}*" | sort -V)
+
+          if [ -z "$EXISTING_TAGS" ]; then
+            # No existing tag for today
+            VERSION="${BASE_VERSION}"
+            TAG="${BASE_TAG}"
+          else
+            # Find the highest suffix
+            HIGHEST_SUFFIX=0
+            for existing_tag in $EXISTING_TAGS; do
+              if [ "$existing_tag" = "$BASE_TAG" ]; then
+                # Base tag exists, at least .1 is needed
+                if [ $HIGHEST_SUFFIX -eq 0 ]; then
+                  HIGHEST_SUFFIX=0
+                fi
+              else
+                # Extract suffix (e.g., v2026.01.20.3 -> 3)
+                SUFFIX="${existing_tag#${BASE_TAG}.}"
+                if [ "$SUFFIX" -gt "$HIGHEST_SUFFIX" ] 2>/dev/null; then
+                  HIGHEST_SUFFIX=$SUFFIX
+                fi
+              fi
+            done
+
+            # Increment suffix
+            NEW_SUFFIX=$((HIGHEST_SUFFIX + 1))
+            VERSION="${BASE_VERSION}.${NEW_SUFFIX}"
+            TAG="${BASE_TAG}.${NEW_SUFFIX}"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Generated version: ${VERSION}, tag: ${TAG}"
+
+  # Build executables for each platform
+  build:
+    needs: generate-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact-name: LootRun-Windows.exe
+            build-output: dist/LootRun.exe
+          - os: macos-latest
+            artifact-name: LootRun-macOS
+            build-output: dist/LootRun
+          - os: ubuntu-latest
+            artifact-name: LootRun-Linux
+            build-output: dist/LootRun
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Write VERSION file
+        run: |
+          echo "${{ needs.generate-version.outputs.version }}" > VERSION
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller LootRun.spec
+
+      - name: Rename artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          Copy-Item "${{ matrix.build-output }}" -Destination "dist/${{ matrix.artifact-name }}"
+        shell: pwsh
+
+      - name: Rename artifact (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cp "${{ matrix.build-output }}" "dist/${{ matrix.artifact-name }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: dist/${{ matrix.artifact-name }}
+          retention-days: 1
+
+  # Create GitHub release with all artifacts
+  release:
+    needs: [generate-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display downloaded artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          find artifacts -type f -ls
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          # Move each artifact to release-assets directory
+          find artifacts -type f -exec mv {} release-assets/ \;
+          # Make Unix executables executable
+          chmod +x release-assets/LootRun-macOS release-assets/LootRun-Linux || true
+          echo "Release assets:"
+          ls -la release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.generate-version.outputs.tag }}
+          name: LOOT RUN ${{ needs.generate-version.outputs.version }}
+          body: |
+            ## LOOT RUN ${{ needs.generate-version.outputs.version }}
+
+            ### Downloads
+            - **Windows**: `LootRun-Windows.exe`
+            - **macOS**: `LootRun-macOS`
+            - **Linux**: `LootRun-Linux`
+
+            ### Installation
+            1. Download the appropriate executable for your platform
+            2. On macOS/Linux, make the file executable: `chmod +x LootRun-*`
+            3. Run the executable
+
+            ### Changes
+            See the [commit history](https://github.com/${{ github.repository }}/commits/${{ needs.generate-version.outputs.tag }}) for details.
+          files: |
+            release-assets/LootRun-Windows.exe
+            release-assets/LootRun-macOS
+            release-assets/LootRun-Linux
+          draft: false
+          prerelease: false
+          generate_release_notes: true
