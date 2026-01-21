@@ -103,6 +103,9 @@ class MessageHandler:
         elif msg_type == ServerMessageType.ERROR.value:
             await self._handle_error(data)
 
+        elif msg_type == ServerMessageType.PLAYER_TIMEOUT.value:
+            pass  # No action needed, just acknowledge
+
     async def _handle_welcome(self, data: dict):
         """Handle WELCOME message."""
         self.state.player_id = data.get("player_id")
@@ -145,6 +148,7 @@ class MessageHandler:
             ready=p.get("ready", False),
             passives=p.get("passives", []),
             color=p.get("color", "white"),
+            is_local=(p.get("player_id") in self.state.local_player_ids)
         )
         self.state.players[player.player_id] = player
 
@@ -314,10 +318,7 @@ class MessageHandler:
         # Update player state
         player_id = data.get("player_id")
         if player_id in self.state.players:
-            if data.get("escaped"):
-                points = data.get("points_awarded", 0)
-                # Points already added server-side, we get updated from standings
-            else:
+            if not data.get("escaped"):
                 self.state.players[player_id].alive = False
 
         if self._on_escape_result:
