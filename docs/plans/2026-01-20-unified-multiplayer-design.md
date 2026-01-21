@@ -214,3 +214,7 @@ The server owns all game state and logic. Clients are purely input/display.
 - Testing across machines
 
 Each phase produces a working (if limited) game.
+
+## Implementation Approach
+
+Use sub-agent driven development to parallelize independent tasks within each phase.
