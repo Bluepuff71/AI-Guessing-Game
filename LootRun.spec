@@ -99,11 +99,15 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Exclude test frameworks (not needed in production)
+        # Exclude test frameworks and test directory
         'pytest',
         'pytest_cov',
         'pytest_mock',
         'pytest_asyncio',
+        '_pytest',
+        'unittest',
+        'tests',
+        'conftest',
         # Exclude tkinter (not used)
         'tkinter',
         '_tkinter',
@@ -111,6 +115,8 @@ a = Analysis(
         'IPython',
         'jupyter',
         'notebook',
+        'pip',
+        'setuptools',
         # Exclude unnecessary matplotlib backends
         'matplotlib',
     ],
