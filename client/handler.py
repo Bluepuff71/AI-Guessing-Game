@@ -1,118 +1,117 @@
 # client/handler.py
 """Message handler for processing server messages."""
 
-from typing import Callable, Awaitable, Optional
-from server.protocol import Message, ServerMessageType
+from typing import Callable, Optional, Dict, Any
+from server.protocol import ServerMessageType
 from client.state import GameState, PlayerInfo, LocationInfo, ClientPhase
 
 
 class MessageHandler:
-    """Handles incoming server messages and updates game state."""
+    """Handles incoming server messages and updates game state.
+
+    This handler is now synchronous. It updates state directly without callbacks.
+    The main loop should check state.phase changes after calling handle().
+    """
 
     def __init__(self, state: GameState):
         self.state = state
-        self._on_phase_change: Optional[Callable[[ClientPhase], Awaitable[None]]] = None
-        self._on_round_result: Optional[Callable[[dict], Awaitable[None]]] = None
-        self._on_escape_required: Optional[Callable[[dict], Awaitable[None]]] = None
-        self._on_escape_result: Optional[Callable[[dict], Awaitable[None]]] = None
-        self._on_game_over: Optional[Callable[[], Awaitable[None]]] = None
-        self._on_player_update: Optional[Callable[[], Awaitable[None]]] = None
+        # Store last event data for the main loop to react to
+        self.last_round_result: Optional[Dict[str, Any]] = None
+        self.last_escape_required: Optional[Dict[str, Any]] = None
+        self.last_escape_result: Optional[Dict[str, Any]] = None
+        self.phase_changed: bool = False
+        self.player_updated: bool = False
+        self.game_over: bool = False
 
-    def set_callbacks(
-        self,
-        on_phase_change: Optional[Callable[[ClientPhase], Awaitable[None]]] = None,
-        on_round_result: Optional[Callable[[dict], Awaitable[None]]] = None,
-        on_escape_required: Optional[Callable[[dict], Awaitable[None]]] = None,
-        on_escape_result: Optional[Callable[[dict], Awaitable[None]]] = None,
-        on_game_over: Optional[Callable[[], Awaitable[None]]] = None,
-        on_player_update: Optional[Callable[[], Awaitable[None]]] = None,
-    ):
-        """Set callback functions for various events."""
-        self._on_phase_change = on_phase_change
-        self._on_round_result = on_round_result
-        self._on_escape_required = on_escape_required
-        self._on_escape_result = on_escape_result
-        self._on_game_over = on_game_over
-        self._on_player_update = on_player_update
+    def clear_events(self):
+        """Clear event flags. Call this after processing events in main loop."""
+        self.last_round_result = None
+        self.last_escape_required = None
+        self.last_escape_result = None
+        self.phase_changed = False
+        self.player_updated = False
+        self.game_over = False
 
-    async def handle(self, msg: Message):
-        """Handle an incoming message."""
-        msg_type = msg.type
-        data = msg.data
+    def handle(self, message_type: str, data: Dict[str, Any]):
+        """Handle an incoming message.
 
-        if msg_type == ServerMessageType.WELCOME.value:
-            await self._handle_welcome(data)
+        Args:
+            message_type: The type of message (e.g., "WELCOME", "GAME_STATE")
+            data: The message payload data
+        """
+        if message_type == ServerMessageType.WELCOME.value:
+            self._handle_welcome(data)
 
-        elif msg_type == ServerMessageType.LOBBY_STATE.value:
-            await self._handle_lobby_state(data)
+        elif message_type == ServerMessageType.LOBBY_STATE.value:
+            self._handle_lobby_state(data)
 
-        elif msg_type == ServerMessageType.PLAYER_JOINED.value:
-            await self._handle_player_joined(data)
+        elif message_type == ServerMessageType.PLAYER_JOINED.value:
+            self._handle_player_joined(data)
 
-        elif msg_type == ServerMessageType.PLAYER_LEFT.value:
-            await self._handle_player_left(data)
+        elif message_type == ServerMessageType.PLAYER_LEFT.value:
+            self._handle_player_left(data)
 
-        elif msg_type == ServerMessageType.PLAYER_READY.value:
-            await self._handle_player_ready(data)
+        elif message_type == ServerMessageType.PLAYER_READY.value:
+            self._handle_player_ready(data)
 
-        elif msg_type == ServerMessageType.GAME_STATE.value:
-            await self._handle_game_state(data)
+        elif message_type == ServerMessageType.GAME_STATE.value:
+            self._handle_game_state(data)
 
-        elif msg_type == ServerMessageType.GAME_STARTED.value:
-            await self._handle_game_started(data)
+        elif message_type == ServerMessageType.GAME_STARTED.value:
+            self._handle_game_started(data)
 
-        elif msg_type == ServerMessageType.ROUND_START.value:
-            await self._handle_round_start(data)
+        elif message_type == ServerMessageType.ROUND_START.value:
+            self._handle_round_start(data)
 
-        elif msg_type == ServerMessageType.PHASE_CHANGE.value:
-            await self._handle_phase_change(data)
+        elif message_type == ServerMessageType.PHASE_CHANGE.value:
+            self._handle_phase_change(data)
 
-        elif msg_type == ServerMessageType.SHOP_STATE.value:
-            await self._handle_shop_state(data)
+        elif message_type == ServerMessageType.SHOP_STATE.value:
+            self._handle_shop_state(data)
 
-        elif msg_type == ServerMessageType.PURCHASE_RESULT.value:
-            await self._handle_purchase_result(data)
+        elif message_type == ServerMessageType.PURCHASE_RESULT.value:
+            self._handle_purchase_result(data)
 
-        elif msg_type == ServerMessageType.PLAYER_SUBMITTED.value:
+        elif message_type == ServerMessageType.PLAYER_SUBMITTED.value:
             pass  # Could update UI to show who submitted
 
-        elif msg_type == ServerMessageType.ALL_CHOICES_LOCKED.value:
+        elif message_type == ServerMessageType.ALL_CHOICES_LOCKED.value:
             pass  # All choices in, resolution coming
 
-        elif msg_type == ServerMessageType.AI_ANALYZING.value:
+        elif message_type == ServerMessageType.AI_ANALYZING.value:
             pass  # Could show animation
 
-        elif msg_type == ServerMessageType.ROUND_RESULT.value:
-            await self._handle_round_result(data)
+        elif message_type == ServerMessageType.ROUND_RESULT.value:
+            self._handle_round_result(data)
 
-        elif msg_type == ServerMessageType.PLAYER_CAUGHT.value:
+        elif message_type == ServerMessageType.PLAYER_CAUGHT.value:
             pass  # Handled via ESCAPE_PHASE
 
-        elif msg_type == ServerMessageType.ESCAPE_PHASE.value:
-            await self._handle_escape_phase(data)
+        elif message_type == ServerMessageType.ESCAPE_PHASE.value:
+            self._handle_escape_phase(data)
 
-        elif msg_type == ServerMessageType.ESCAPE_RESULT.value:
-            await self._handle_escape_result(data)
+        elif message_type == ServerMessageType.ESCAPE_RESULT.value:
+            self._handle_escape_result(data)
 
-        elif msg_type == ServerMessageType.PLAYER_ELIMINATED.value:
-            await self._handle_player_eliminated(data)
+        elif message_type == ServerMessageType.PLAYER_ELIMINATED.value:
+            self._handle_player_eliminated(data)
 
-        elif msg_type == ServerMessageType.GAME_OVER.value:
-            await self._handle_game_over(data)
+        elif message_type == ServerMessageType.GAME_OVER.value:
+            self._handle_game_over(data)
 
-        elif msg_type == ServerMessageType.ERROR.value:
-            await self._handle_error(data)
+        elif message_type == ServerMessageType.ERROR.value:
+            self._handle_error(data)
 
-        elif msg_type == ServerMessageType.PLAYER_TIMEOUT.value:
+        elif message_type == ServerMessageType.PLAYER_TIMEOUT.value:
             pass  # No action needed, just acknowledge
 
-    async def _handle_welcome(self, data: dict):
+    def _handle_welcome(self, data: dict):
         """Handle WELCOME message."""
         self.state.player_id = data.get("player_id")
         self.state.game_id = data.get("game_id")
         self.state.connected = True
 
-    async def _handle_lobby_state(self, data: dict):
+    def _handle_lobby_state(self, data: dict):
         """Handle LOBBY_STATE message."""
         self.state.game_id = data.get("game_id")
         self.state.phase = ClientPhase.LOBBY
@@ -133,10 +132,9 @@ class MessageHandler:
             )
             self.state.players[player.player_id] = player
 
-        if self._on_player_update:
-            await self._on_player_update()
+        self.player_updated = True
 
-    async def _handle_player_joined(self, data: dict):
+    def _handle_player_joined(self, data: dict):
         """Handle PLAYER_JOINED message."""
         p = data.get("player", {})
         player = PlayerInfo(
@@ -152,29 +150,26 @@ class MessageHandler:
         )
         self.state.players[player.player_id] = player
 
-        if self._on_player_update:
-            await self._on_player_update()
+        self.player_updated = True
 
-    async def _handle_player_left(self, data: dict):
+    def _handle_player_left(self, data: dict):
         """Handle PLAYER_LEFT message."""
         player_id = data.get("player_id")
         if player_id in self.state.players:
             self.state.players[player_id].connected = False
 
-        if self._on_player_update:
-            await self._on_player_update()
+        self.player_updated = True
 
-    async def _handle_player_ready(self, data: dict):
+    def _handle_player_ready(self, data: dict):
         """Handle PLAYER_READY message."""
         player_id = data.get("player_id")
         ready = data.get("ready", False)
         if player_id in self.state.players:
             self.state.players[player_id].ready = ready
 
-        if self._on_player_update:
-            await self._on_player_update()
+        self.player_updated = True
 
-    async def _handle_game_state(self, data: dict):
+    def _handle_game_state(self, data: dict):
         """Handle full GAME_STATE sync."""
         self.state.round_num = data.get("round_num", 0)
         self.state.previous_ai_location = data.get("previous_ai_location")
@@ -204,7 +199,7 @@ class MessageHandler:
                 player.ready = p.get("ready", False)
                 player.passives = p.get("passives", [])
 
-    async def _handle_game_started(self, data: dict):
+    def _handle_game_started(self, data: dict):
         """Handle GAME_STARTED message."""
         self.state.game_id = data.get("game_id")
         self.state.round_num = 1  # Game starts at round 1
@@ -226,7 +221,7 @@ class MessageHandler:
                 self.state.players[pid].points = p.get("points", 0)
                 self.state.players[pid].alive = p.get("alive", True)
 
-    async def _handle_round_start(self, data: dict):
+    def _handle_round_start(self, data: dict):
         """Handle ROUND_START message."""
         self.state.round_num = data.get("round_num", 0)
         self.state.timer_seconds = data.get("timer_seconds", 30)
@@ -236,11 +231,9 @@ class MessageHandler:
 
         self.state.phase = ClientPhase.CHOOSING
         self.state.current_local_player_index = 0
+        self.phase_changed = True
 
-        if self._on_phase_change:
-            await self._on_phase_change(ClientPhase.CHOOSING)
-
-    async def _handle_phase_change(self, data: dict):
+    def _handle_phase_change(self, data: dict):
         """Handle PHASE_CHANGE message."""
         phase_str = data.get("phase", "")
 
@@ -253,10 +246,9 @@ class MessageHandler:
         elif phase_str == "escape":
             self.state.phase = ClientPhase.ESCAPE
 
-        if self._on_phase_change:
-            await self._on_phase_change(self.state.phase)
+        self.phase_changed = True
 
-    async def _handle_shop_state(self, data: dict):
+    def _handle_shop_state(self, data: dict):
         """Handle SHOP_STATE message."""
         self.state.available_passives = data.get("available_passives", [])
 
@@ -266,10 +258,9 @@ class MessageHandler:
             self.state.players[player_id].points = data.get("player_points", 0)
 
         self.state.phase = ClientPhase.SHOP
-        if self._on_phase_change:
-            await self._on_phase_change(ClientPhase.SHOP)
+        self.phase_changed = True
 
-    async def _handle_purchase_result(self, data: dict):
+    def _handle_purchase_result(self, data: dict):
         """Handle PURCHASE_RESULT message."""
         if data.get("success"):
             player_id = data.get("player_id")
@@ -283,7 +274,7 @@ class MessageHandler:
                             self.state.players[player_id].passives.append(p.get("id"))
                             break
 
-    async def _handle_round_result(self, data: dict):
+    def _handle_round_result(self, data: dict):
         """Handle ROUND_RESULT message."""
         self.state.last_round_results = data
         self.state.phase = ClientPhase.RESULTS
@@ -295,10 +286,9 @@ class MessageHandler:
                 self.state.players[pid].points = standing.get("points", 0)
                 self.state.players[pid].alive = standing.get("alive", True)
 
-        if self._on_round_result:
-            await self._on_round_result(data)
+        self.last_round_result = data
 
-    async def _handle_escape_phase(self, data: dict):
+    def _handle_escape_phase(self, data: dict):
         """Handle ESCAPE_PHASE message."""
         player_id = data.get("player_id")
 
@@ -309,10 +299,9 @@ class MessageHandler:
             self.state.caught_points = data.get("location_points", 0)
             self.state.phase = ClientPhase.ESCAPE
 
-            if self._on_escape_required:
-                await self._on_escape_required(data)
+            self.last_escape_required = data
 
-    async def _handle_escape_result(self, data: dict):
+    def _handle_escape_result(self, data: dict):
         """Handle ESCAPE_RESULT message."""
         self.state.last_escape_result = data
 
@@ -322,27 +311,25 @@ class MessageHandler:
             if not data.get("escaped"):
                 self.state.players[player_id].alive = False
 
-        if self._on_escape_result:
-            await self._on_escape_result(data)
+        self.last_escape_result = data
 
-    async def _handle_player_eliminated(self, data: dict):
+    def _handle_player_eliminated(self, data: dict):
         """Handle PLAYER_ELIMINATED message."""
         player_id = data.get("player_id")
         if player_id in self.state.players:
             self.state.players[player_id].alive = False
             self.state.players[player_id].points = data.get("final_score", 0)
 
-    async def _handle_game_over(self, data: dict):
+    def _handle_game_over(self, data: dict):
         """Handle GAME_OVER message."""
         self.state.winner = data.get("winner")
         self.state.ai_wins = data.get("ai_wins", False)
         self.state.final_standings = data.get("final_standings", [])
         self.state.phase = ClientPhase.GAME_OVER
 
-        if self._on_game_over:
-            await self._on_game_over()
+        self.game_over = True
 
-    async def _handle_error(self, data: dict):
+    def _handle_error(self, data: dict):
         """Handle ERROR message."""
         # Could display error to user
         pass

@@ -12,12 +12,10 @@ from typing import Optional
 
 try:
     import websockets
-    from websockets.client import WebSocketClientProtocol
     from websockets.exceptions import ConnectionClosed, ConnectionClosedError, ConnectionClosedOK
     WEBSOCKETS_AVAILABLE = True
 except ImportError:
     WEBSOCKETS_AVAILABLE = False
-    WebSocketClientProtocol = None
     ConnectionClosed = Exception
     ConnectionClosedError = Exception
     ConnectionClosedOK = Exception
@@ -54,9 +52,14 @@ class NetworkThread:
         self.incoming_queue: queue.Queue = queue.Queue()
         self.outgoing_queue: queue.Queue = queue.Queue()
         self._thread: Optional[threading.Thread] = None
-        self._running: bool = False
+        self._stop_event: threading.Event = threading.Event()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._url: Optional[str] = None
+
+    @property
+    def is_running(self) -> bool:
+        """Check if the network thread is currently running."""
+        return not self._stop_event.is_set() and self._thread is not None and self._thread.is_alive()
 
     def start(self, url: str) -> bool:
         """Start thread and connect to server.
@@ -74,11 +77,11 @@ class NetworkThread:
             })
             return False
 
-        if self._running:
+        if self.is_running:
             return False
 
         self._url = url
-        self._running = True
+        self._stop_event.clear()
 
         # Create and start the background thread
         self._thread = threading.Thread(
@@ -91,10 +94,10 @@ class NetworkThread:
 
     def stop(self):
         """Signal thread to stop and wait for it to finish."""
-        if not self._running:
+        if not self.is_running:
             return
 
-        self._running = False
+        self._stop_event.set()
 
         # Queue a disconnect message to wake up the thread
         self.outgoing_queue.put({"type": "DISCONNECT"})
@@ -152,7 +155,7 @@ class NetworkThread:
 
     async def _async_main(self):
         """Main async logic for the network thread."""
-        websocket: Optional[WebSocketClientProtocol] = None
+        websocket = None
 
         try:
             # Connect to the server
@@ -196,11 +199,11 @@ class NetworkThread:
                 except Exception:
                     pass
 
-    async def _receive_loop(self, websocket: WebSocketClientProtocol):
+    async def _receive_loop(self, websocket):
         """Receive messages from the WebSocket and put them in the incoming queue."""
         try:
             async for raw_message in websocket:
-                if not self._running:
+                if self._stop_event.is_set():
                     break
 
                 # Parse the message using the protocol
@@ -224,9 +227,9 @@ class NetworkThread:
                 "error": str(e)
             })
 
-    async def _send_loop(self, websocket: WebSocketClientProtocol):
+    async def _send_loop(self, websocket):
         """Poll the outgoing queue and send messages over the WebSocket."""
-        while self._running:
+        while not self._stop_event.is_set():
             try:
                 # Check for outgoing messages (non-blocking with short timeout)
                 try:

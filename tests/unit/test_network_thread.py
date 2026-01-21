@@ -25,7 +25,7 @@ class TestNetworkThreadInitialization:
         """Test that thread is not running after initialization."""
         thread = NetworkThread()
 
-        assert thread._running is False
+        assert thread.is_running is False
         assert thread._thread is None
 
     def test_init_no_event_loop(self):
@@ -39,7 +39,7 @@ class TestNetworkThreadStart:
     """Tests for NetworkThread.start() method."""
 
     def test_start_sets_running_flag(self):
-        """Test that start() sets the running flag."""
+        """Test that start() clears the stop event (meaning running)."""
         thread = NetworkThread()
 
         # Mock the thread to prevent actual connection
@@ -47,7 +47,7 @@ class TestNetworkThreadStart:
             result = thread.start("ws://localhost:8765")
 
         assert result is True
-        assert thread._running is True
+        assert thread._stop_event.is_set() is False  # Not stopped = running
 
     def test_start_creates_daemon_thread(self):
         """Test that start() creates a daemon thread."""
@@ -74,8 +74,9 @@ class TestNetworkThreadStart:
         thread = NetworkThread()
 
         with patch.object(threading.Thread, 'start'):
-            thread.start("ws://localhost:8765")
-            result = thread.start("ws://localhost:8766")
+            with patch.object(threading.Thread, 'is_alive', return_value=True):
+                thread.start("ws://localhost:8765")
+                result = thread.start("ws://localhost:8766")
 
         assert result is False
 
@@ -93,30 +94,28 @@ class TestNetworkThreadStart:
 class TestNetworkThreadStop:
     """Tests for NetworkThread.stop() method."""
 
-    def test_stop_clears_running_flag(self):
-        """Test that stop() clears the running flag."""
+    def test_stop_sets_stop_event(self):
+        """Test that stop() sets the stop event."""
         thread = NetworkThread()
 
         with patch.object(threading.Thread, 'start'):
-            thread.start("ws://localhost:8765")
+            with patch.object(threading.Thread, 'is_alive', return_value=True):
+                thread.start("ws://localhost:8765")
+                # Mock join to prevent blocking, keep is_alive True so stop() proceeds
+                with patch.object(threading.Thread, 'join'):
+                    thread.stop()
 
-        # Mock join to prevent blocking
-        with patch.object(threading.Thread, 'join'):
-            with patch.object(threading.Thread, 'is_alive', return_value=False):
-                thread.stop()
-
-        assert thread._running is False
+        assert thread._stop_event.is_set() is True
 
     def test_stop_queues_disconnect_message(self):
         """Test that stop() queues a DISCONNECT message."""
         thread = NetworkThread()
 
         with patch.object(threading.Thread, 'start'):
-            thread.start("ws://localhost:8765")
-
-        with patch.object(threading.Thread, 'join'):
-            with patch.object(threading.Thread, 'is_alive', return_value=False):
-                thread.stop()
+            with patch.object(threading.Thread, 'is_alive', return_value=True):
+                thread.start("ws://localhost:8765")
+                with patch.object(threading.Thread, 'join'):
+                    thread.stop()
 
         # Check that disconnect was queued
         msg = thread.outgoing_queue.get_nowait()
@@ -129,7 +128,7 @@ class TestNetworkThreadStop:
         # Should not raise
         thread.stop()
 
-        assert thread._running is False
+        assert thread._stop_event.is_set() is False  # Still not set since we never started
 
 
 class TestNetworkThreadSend:
@@ -266,7 +265,7 @@ class TestNetworkThreadIntegration:
     async def test_receive_loop_parses_messages(self):
         """Test that _receive_loop correctly parses server messages."""
         thread = NetworkThread()
-        thread._running = True
+        # _stop_event is not set by default, so the loop will run
 
         # Create a mock websocket that yields one message then closes
         mock_ws = AsyncMock()
@@ -291,7 +290,7 @@ class TestNetworkThreadIntegration:
     async def test_send_loop_sends_messages(self):
         """Test that _send_loop sends queued messages."""
         thread = NetworkThread()
-        thread._running = True
+        # _stop_event is not set by default, so the loop will run
 
         # Queue a message to send, then a disconnect
         thread.outgoing_queue.put({
