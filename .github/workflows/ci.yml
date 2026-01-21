@@ -10,9 +10,10 @@ on:
       - main
 
 jobs:
-  # Fast tests run on every push
+  # Fast tests run on every push, except PRs to main (full-tests covers those)
   fast-tests:
     runs-on: ubuntu-latest
+    if: ${{ !(github.event_name == 'pull_request' && github.base_ref == 'main') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
