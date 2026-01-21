@@ -15,6 +15,11 @@ from client import ui
 DEFAULT_PORT = 8765
 
 
+class ConnectionLostError(Exception):
+    """Raised when connection to server is lost."""
+    pass
+
+
 class GameClient:
     """Main game client application."""
 
@@ -24,6 +29,8 @@ class GameClient:
         self.handler = MessageHandler(self.state)
         self._running = False
         self._server_process = None
+        self._connection_lost = False
+        self._should_return_to_menu = False
 
         # Hot-seat support: map player_id -> connection
         # In hot-seat mode, each local player has their own connection to the server.
@@ -70,9 +77,68 @@ class GameClient:
             self._server_process.terminate()
             self._server_process = None
 
+    async def _on_connection_lost(self):
+        """Handle connection loss."""
+        self._connection_lost = True
+        self.state.connected = False
+
+    def _reset_connection_state(self):
+        """Reset connection-related state for a new game."""
+        self._connection_lost = False
+        self._should_return_to_menu = False
+
+    async def _handle_connection_error(self, context: str = "operation"):
+        """Handle a connection error, show message and cleanup.
+
+        Returns True if user wants to return to menu.
+        """
+        ui.clear_screen()
+        ui.print_error(f"Connection lost during {context}.")
+        ui.print_info("The server may have closed or network issues occurred.")
+        ui.print_info("Press Enter to return to main menu...")
+        ui.wait_for_enter()
+        await self._cleanup_current_game()
+        return True
+
+    async def _cleanup_current_game(self):
+        """Clean up current game resources without exiting."""
+        # Disconnect all local connections (for hot-seat)
+        for conn in self._local_connections.values():
+            if conn != self.connection:
+                try:
+                    await conn.disconnect()
+                except Exception:
+                    pass
+        self._local_connections.clear()
+
+        try:
+            await self.connection.disconnect()
+        except Exception:
+            pass
+
+        self._stop_local_server()
+        self.state.reset_for_new_game()
+        self._reset_connection_state()
+
+    async def _safe_send(self, conn: ConnectionManager, send_coro) -> bool:
+        """Safely send a message, handling connection errors.
+
+        Returns True if send succeeded, False if connection was lost.
+        """
+        try:
+            await send_coro
+            return True
+        except RuntimeError as e:
+            if "Not connected" in str(e):
+                return False
+            raise
+        except Exception:
+            return False
+
     async def _play_single_player(self):
         """Start single player game."""
         self.state.reset_for_new_game()
+        self._reset_connection_state()
 
         # Get player name
         ui.clear_screen()
@@ -88,12 +154,20 @@ class GameClient:
         self.state.local_player_ids = [self.state.player_id]
 
         # Set ready and wait for game
-        await self.connection.send_ready()
-        await self._game_loop()
+        try:
+            if not await self._safe_send(self.connection, self.connection.send_ready()):
+                await self._handle_connection_error("game start")
+                return
+            await self._game_loop()
+        except ConnectionLostError:
+            await self._handle_connection_error("game")
+        finally:
+            await self._cleanup_current_game()
 
     async def _play_local_multiplayer(self):
         """Start local multiplayer (hot-seat)."""
         self.state.reset_for_new_game()
+        self._reset_connection_state()
         self._local_connections.clear()
 
         ui.clear_screen()
@@ -141,7 +215,10 @@ class GameClient:
         # If any connection failed, clean up and abort
         if connection_failed:
             for conn in self._local_connections.values():
-                await conn.disconnect()
+                try:
+                    await conn.disconnect()
+                except Exception:
+                    pass
             self._local_connections.clear()
             self._stop_local_server()
             return
@@ -155,13 +232,21 @@ class GameClient:
         await asyncio.sleep(0.5)
 
         # All players ready up
-        for pid, conn in self._local_connections.items():
-            await conn.send_ready()
+        try:
+            for pid, conn in self._local_connections.items():
+                if not await self._safe_send(conn, conn.send_ready()):
+                    await self._handle_connection_error("game start")
+                    return
 
-        await self._game_loop()
+            await self._game_loop()
+        except ConnectionLostError:
+            await self._handle_connection_error("game")
+        finally:
+            await self._cleanup_current_game()
 
     async def _host_online_game(self):
         """Host an online game."""
+        self._reset_connection_state()
         ui.clear_screen()
         ui.print_header("Host Online Game")
         name = ui.get_input("Enter your name: ") or "Host"
@@ -189,12 +274,16 @@ class GameClient:
         try:
             # Show lobby and wait for ready
             await self._lobby_loop(is_host=True)
+        except ConnectionLostError:
+            await self._handle_connection_error("lobby")
         finally:
             # Stop broadcasting when done
             await self._lan_discovery.stop_broadcasting()
+            await self._cleanup_current_game()
 
     async def _join_online_game(self):
         """Join an online game."""
+        self._reset_connection_state()
         ui.clear_screen()
         ui.print_header("Join Online Game")
 
@@ -252,7 +341,12 @@ class GameClient:
         self.state.local_player_ids = [self.state.player_id]
 
         # Show lobby and wait for game start
-        await self._lobby_loop(is_host=False)
+        try:
+            await self._lobby_loop(is_host=False)
+        except ConnectionLostError:
+            await self._handle_connection_error("lobby")
+        finally:
+            await self._cleanup_current_game()
 
     async def _start_local_server(self, expose: bool = False):
         """Start local server subprocess."""
@@ -273,6 +367,7 @@ class GameClient:
         try:
             await self.connection.connect(f"ws://{host}:{port}")
             self.connection.set_message_handler(self.handler.handle)
+            self.connection.set_on_disconnect(self._on_connection_lost)
             await self.connection.start_receiving()
 
             await self.connection.send_join(username)
@@ -287,6 +382,9 @@ class GameClient:
             ui.print_error("Connection timeout")
             return False
 
+        except ConnectionError as e:
+            ui.print_error(f"Failed to connect: {e}")
+            return False
         except Exception as e:
             ui.print_error(f"Failed to connect: {e}")
             return False
@@ -337,6 +435,10 @@ class GameClient:
         self.state.phase = ClientPhase.LOBBY
 
         while self.state.phase == ClientPhase.LOBBY:
+            # Check for connection loss
+            if self._connection_lost:
+                raise ConnectionLostError("Connection lost in lobby")
+
             ui.print_lobby(self.state, is_host)
 
             # Simple input handling
@@ -345,13 +447,16 @@ class GameClient:
             if inp == "r":
                 player = self.state.players.get(self.state.player_id)
                 if player and player.ready:
-                    await self.connection.send_unready()
+                    if not await self._safe_send(self.connection, self.connection.send_unready()):
+                        raise ConnectionLostError("Connection lost while updating ready status")
                 else:
-                    await self.connection.send_ready()
+                    if not await self._safe_send(self.connection, self.connection.send_ready()):
+                        raise ConnectionLostError("Connection lost while updating ready status")
 
             elif inp == "s" and is_host:
                 # Start game (by setting ready, game auto-starts when all ready)
-                await self.connection.send_ready()
+                if not await self._safe_send(self.connection, self.connection.send_ready()):
+                    raise ConnectionLostError("Connection lost while starting game")
 
             await asyncio.sleep(0.1)
 
@@ -361,6 +466,9 @@ class GameClient:
     async def _game_loop(self):
         """Main game loop."""
         while self.state.phase not in [ClientPhase.GAME_OVER, ClientPhase.MAIN_MENU]:
+            # Check for connection loss
+            if self._connection_lost:
+                raise ConnectionLostError("Connection lost during game")
             await asyncio.sleep(0.1)
 
         # Show game over and return
@@ -379,11 +487,16 @@ class GameClient:
         """Handle shop phase for all local players."""
         # For hot-seat, each local player gets a shop turn
         for i, pid in enumerate(self.state.local_player_ids):
+            # Check for connection loss
+            if self._connection_lost:
+                raise ConnectionLostError("Connection lost during shop phase")
+
             player = self.state.players.get(pid)
             conn = self._local_connections.get(pid, self.connection)
 
             if not player or not player.alive:
-                await conn.send_skip_shop()
+                if not await self._safe_send(conn, conn.send_skip_shop()):
+                    raise ConnectionLostError("Connection lost during shop phase")
                 continue
 
             # If multiple players, clear screen between turns
@@ -398,10 +511,14 @@ class GameClient:
             # Shop loop for this player
             shopping = True
             while shopping and self.state.phase == ClientPhase.SHOP:
+                if self._connection_lost:
+                    raise ConnectionLostError("Connection lost during shop phase")
+
                 inp = ui.get_input("> ").lower()
 
                 if inp == "skip" or inp == "s":
-                    await conn.send_skip_shop()
+                    if not await self._safe_send(conn, conn.send_skip_shop()):
+                        raise ConnectionLostError("Connection lost during shop phase")
                     shopping = False
 
                 else:
@@ -409,7 +526,8 @@ class GameClient:
                         idx = int(inp) - 1
                         if 0 <= idx < len(self.state.available_passives):
                             passive = self.state.available_passives[idx]
-                            await conn.send_shop_purchase(passive.get("id"))
+                            if not await self._safe_send(conn, conn.send_shop_purchase(passive.get("id"))):
+                                raise ConnectionLostError("Connection lost during shop phase")
                             await asyncio.sleep(0.2)  # Wait for result
                             ui.print_shop(self.state, player)
                     except ValueError:
@@ -421,10 +539,17 @@ class GameClient:
         Collects all choices first, then sends them together.
         This prevents the server from seeing partial submissions.
         """
+        # Check for connection loss
+        if self._connection_lost:
+            raise ConnectionLostError("Connection lost during choosing phase")
+
         # Collect choices from all local players
         choices: Dict[str, int] = {}  # player_id -> location choice
 
         for i, pid in enumerate(self.state.local_player_ids):
+            if self._connection_lost:
+                raise ConnectionLostError("Connection lost during choosing phase")
+
             player = self.state.players.get(pid)
 
             if not player or not player.alive:
@@ -445,7 +570,8 @@ class GameClient:
         # All choices collected - now send them all
         for pid, choice in choices.items():
             conn = self._local_connections.get(pid, self.connection)
-            await conn.send_location_choice(choice)
+            if not await self._safe_send(conn, conn.send_location_choice(choice)):
+                raise ConnectionLostError("Connection lost while submitting choices")
 
     async def _on_round_result(self, results: dict):
         """Handle round results."""
@@ -454,6 +580,9 @@ class GameClient:
 
     async def _on_escape_required(self, data: dict):
         """Handle escape phase for a caught player."""
+        if self._connection_lost:
+            raise ConnectionLostError("Connection lost during escape phase")
+
         player_id = data.get("player_id")
         player = self.state.players.get(player_id)
         if not player:
@@ -465,7 +594,8 @@ class GameClient:
         ui.print_escape_prompt(self.state, player)
         choice_idx = ui.get_escape_choice(len(self.state.escape_options))
         option_id = self.state.escape_options[choice_idx].get("id")
-        await conn.send_escape_choice(option_id)
+        if not await self._safe_send(conn, conn.send_escape_choice(option_id)):
+            raise ConnectionLostError("Connection lost while submitting escape choice")
 
     async def _on_escape_result(self, result: dict):
         """Handle escape result."""
