@@ -52,11 +52,13 @@ class TestStartLocalServer:
         """Test that local server is started as subprocess."""
         mock_popen = MagicMock()
         monkeypatch.setattr(subprocess, "Popen", mock_popen)
-        monkeypatch.setattr(time, "sleep", lambda x: None)
+        monkeypatch.setattr("client.main.is_server_running", lambda port: False)
+        monkeypatch.setattr("client.main.wait_for_server", lambda port, timeout: True)
 
         client = GameClient()
-        client._start_local_server()
+        result = client._start_local_server()
 
+        assert result is True
         assert mock_popen.called
         assert client._server_process is not None
 
@@ -69,11 +71,13 @@ class TestStartLocalServer:
             return MagicMock()
 
         monkeypatch.setattr(subprocess, "Popen", mock_popen)
-        monkeypatch.setattr(time, "sleep", lambda x: None)
+        monkeypatch.setattr("client.main.is_server_running", lambda port: False)
+        monkeypatch.setattr("client.main.wait_for_server", lambda port, timeout: True)
 
         client = GameClient()
-        client._start_local_server(expose=True)
+        result = client._start_local_server(expose=True)
 
+        assert result is True
         assert "--host" in call_args[0]
         host_idx = call_args[0].index("--host")
         assert call_args[0][host_idx + 1] == "0.0.0.0"
@@ -87,14 +91,45 @@ class TestStartLocalServer:
             return MagicMock()
 
         monkeypatch.setattr(subprocess, "Popen", mock_popen)
-        monkeypatch.setattr(time, "sleep", lambda x: None)
+        monkeypatch.setattr("client.main.is_server_running", lambda port: False)
+        monkeypatch.setattr("client.main.wait_for_server", lambda port, timeout: True)
 
         client = GameClient()
-        client._start_local_server(expose=False)
+        result = client._start_local_server(expose=False)
 
+        assert result is True
         assert "--host" in call_args[0]
         host_idx = call_args[0].index("--host")
         assert call_args[0][host_idx + 1] == "127.0.0.1"
+
+    def test_start_local_server_returns_false_if_already_running(self, monkeypatch):
+        """Test that _start_local_server returns False if server already running."""
+        monkeypatch.setattr("client.main.is_server_running", lambda port: True)
+        monkeypatch.setattr("client.ui.print_error", lambda msg: None)
+        monkeypatch.setattr("client.ui.print_info", lambda msg: None)
+
+        client = GameClient()
+        result = client._start_local_server()
+
+        assert result is False
+        assert client._server_process is None
+
+    def test_start_local_server_returns_false_if_server_fails_to_start(self, monkeypatch):
+        """Test that _start_local_server returns False if server fails to start."""
+        mock_process = MagicMock()
+        mock_process.poll.return_value = 1  # Process exited with error
+        mock_process.communicate.return_value = (b"Some error", b"")
+
+        monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: mock_process)
+        monkeypatch.setattr("client.main.is_server_running", lambda port: False)
+        monkeypatch.setattr("client.main.wait_for_server", lambda port, timeout: False)
+        monkeypatch.setattr("client.ui.print_error", lambda msg: None)
+
+        client = GameClient()
+        result = client._start_local_server()
+
+        assert result is False
+        assert client._server_process is None
 
 
 class TestStopLocalServer:
@@ -1162,7 +1197,8 @@ class TestPlaySinglePlayer:
         monkeypatch.setattr("client.ui.print_connecting", lambda h, p: None)
         monkeypatch.setattr("client.ui.print_info", lambda m: None)
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: MagicMock())
-        monkeypatch.setattr(time, "sleep", lambda x: None)
+        monkeypatch.setattr("client.main.is_server_running", lambda port: False)
+        monkeypatch.setattr("client.main.wait_for_server", lambda port, timeout: True)
 
         network = mock_network([
             {"type": "CONNECTED"},
@@ -1190,7 +1226,8 @@ class TestPlaySinglePlayer:
         monkeypatch.setattr("client.ui.print_connecting", lambda h, p: None)
         monkeypatch.setattr("client.ui.print_error", lambda m: None)
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: MagicMock())
-        monkeypatch.setattr(time, "sleep", lambda x: None)
+        monkeypatch.setattr("client.main.is_server_running", lambda port: False)
+        monkeypatch.setattr("client.main.wait_for_server", lambda port, timeout: True)
 
         network = mock_network([
             {"type": "CONNECTION_LOST", "error": "Failed"},
@@ -1221,7 +1258,8 @@ class TestPlayLocalMultiplayer:
         monkeypatch.setattr("client.ui.print_info", lambda m: None)
         monkeypatch.setattr("client.ui.print_error", lambda m: None)
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: MagicMock())
-        monkeypatch.setattr(time, "sleep", lambda x: None)
+        monkeypatch.setattr("client.main.is_server_running", lambda port: False)
+        monkeypatch.setattr("client.main.wait_for_server", lambda port, timeout: True)
 
         # First player connection
         net1 = mock_network([
@@ -1268,7 +1306,8 @@ class TestPlayLocalMultiplayer:
         monkeypatch.setattr("client.ui.print_connecting", lambda h, p: None)
         monkeypatch.setattr("client.ui.print_error", lambda m: None)
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: MagicMock())
-        monkeypatch.setattr(time, "sleep", lambda x: None)
+        monkeypatch.setattr("client.main.is_server_running", lambda port: False)
+        monkeypatch.setattr("client.main.wait_for_server", lambda port, timeout: True)
 
         network = mock_network([{"type": "CONNECTION_LOST"}])
         monkeypatch.setattr("client.main.NetworkThread", lambda: network)
@@ -1292,7 +1331,8 @@ class TestPlayLocalMultiplayer:
         monkeypatch.setattr("client.ui.print_info", lambda m: None)
         monkeypatch.setattr("client.ui.print_error", lambda m: None)
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: MagicMock())
-        monkeypatch.setattr(time, "sleep", lambda x: None)
+        monkeypatch.setattr("client.main.is_server_running", lambda port: False)
+        monkeypatch.setattr("client.main.wait_for_server", lambda port, timeout: True)
 
         # First player succeeds
         net1 = mock_network([
@@ -1338,7 +1378,8 @@ class TestPlayOnlineHost:
         monkeypatch.setattr("client.ui.print_info", lambda m: None)
         monkeypatch.setattr("client.ui.print_connecting", lambda h, p: None)
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: MagicMock())
-        monkeypatch.setattr(time, "sleep", lambda x: None)
+        monkeypatch.setattr("client.main.is_server_running", lambda port: False)
+        monkeypatch.setattr("client.main.wait_for_server", lambda port, timeout: True)
 
         # Mock asyncio.run for LAN discovery
         async_calls = []
