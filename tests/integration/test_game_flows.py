@@ -45,11 +45,13 @@ def game_server():
         poll_result = proc.poll()
         if poll_result is not None:
             try:
-                _, stderr = proc.communicate(timeout=2)
+                stdout, stderr = proc.communicate(timeout=2)
+                stdout_text = stdout.decode().strip() if stdout else "No stdout"
                 stderr_text = stderr.decode().strip() if stderr else "No stderr"
             except Exception:
+                stdout_text = "Could not capture stdout"
                 stderr_text = "Could not capture stderr"
-            error_msg = f"Server process exited with code {poll_result}. stderr: {stderr_text}"
+            error_msg = f"Server process exited with code {poll_result}. stdout: {stdout_text} | stderr: {stderr_text}"
         else:
             error_msg = "Server did not start accepting connections in time"
             proc.terminate()
@@ -87,11 +89,13 @@ def game_server_18901():
         poll_result = proc.poll()
         if poll_result is not None:
             try:
-                _, stderr = proc.communicate(timeout=2)
+                stdout, stderr = proc.communicate(timeout=2)
+                stdout_text = stdout.decode().strip() if stdout else "No stdout"
                 stderr_text = stderr.decode().strip() if stderr else "No stderr"
             except Exception:
+                stdout_text = "Could not capture stdout"
                 stderr_text = "Could not capture stderr"
-            error_msg = f"Server process exited with code {poll_result}. stderr: {stderr_text}"
+            error_msg = f"Server process exited with code {poll_result}. stdout: {stdout_text} | stderr: {stderr_text}"
         else:
             error_msg = "Server did not start accepting connections in time"
             proc.terminate()
