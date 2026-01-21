@@ -5,9 +5,23 @@ A strategic text-based party game where players compete to reach 100 points by l
 ## Quick Start
 
 ```bash
-pip install rich lightgbm scikit-learn numpy
+pip install -r requirements.txt
 python main.py
 ```
+
+## Game Modes
+
+### Single Player
+Play solo against the Seeker AI. Test your unpredictability skills one-on-one.
+
+### Hot-Seat Multiplayer (2-6 players)
+Local multiplayer on a single terminal. Each player takes their turn privately with screen clearing between turns.
+
+### LAN Multiplayer
+Host a game on your local network. Other players can discover and join your game automatically via LAN discovery.
+
+### Online Multiplayer
+Connect to a remote server by entering the host address. Play with friends anywhere.
 
 **Objective:** Reach 100 points or be the last player standing.
 
@@ -106,20 +120,23 @@ After every **5 games**, the AI automatically retrains:
 
 ```bash
 # Install dependencies
-pip install rich lightgbm scikit-learn numpy
+pip install -r requirements.txt
 
-# Run the game
+# Run the game client
 python main.py
 
-# Optional: Run tests
-python test_game.py    # Test game components
-python test_ml.py      # Test ML pipeline
+# Run a dedicated server (optional, for hosting)
+python -m server.main --host 0.0.0.0 --port 8765
+
+# Run tests
+pytest
 ```
 
 ## Requirements
 
 - Python 3.9+
 - rich (terminal UI)
+- websockets (multiplayer networking)
 - lightgbm (ML model)
 - scikit-learn (ML utilities)
 - numpy
@@ -141,11 +158,18 @@ python test_ml.py      # Test ML pipeline
 
 ## Advanced Features
 
-✅ **LightGBM ML Model** - Trained on game history
-✅ **Cross-game Learning** - AI improves from previous games
-✅ **Feature Importance** - Shows what patterns matter most
-✅ **Automatic Retraining** - Model updates every 5 games
-✅ **Graceful Fallback** - Uses baseline AI if ML unavailable
+### Multiplayer Architecture
+- **Client-Server Model** - WebSocket-based real-time communication
+- **Server-Authoritative** - All game logic runs server-side to prevent cheating
+- **LAN Discovery** - UDP broadcast automatically finds games on local network
+- **Reconnection Support** - Automatic reconnection with exponential backoff
+
+### AI System
+- **LightGBM ML Model** - Trained on game history
+- **Cross-game Learning** - AI improves from previous games
+- **Feature Importance** - Shows what patterns matter most
+- **Automatic Retraining** - Model updates every 5 games
+- **Graceful Fallback** - Uses baseline AI if ML unavailable
 
 ## Future Enhancements
 
@@ -158,6 +182,7 @@ python test_ml.py      # Test ML pipeline
 
 Built with:
 - [Rich](https://github.com/Textualize/rich) for beautiful terminal UI
+- [websockets](https://websockets.readthedocs.io/) for multiplayer networking
 - [LightGBM](https://lightgbm.readthedocs.io/) for machine learning
 
 ## License
