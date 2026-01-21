@@ -617,14 +617,3 @@ class GameClient:
             self._server_process = None
 
 
-def main():
-    """Main entry point."""
-    client = GameClient()
-    try:
-        client.run()
-    except KeyboardInterrupt:
-        pass
-
-
-if __name__ == "__main__":
-    main()
