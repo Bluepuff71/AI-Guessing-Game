@@ -78,7 +78,12 @@ class GameServer:
             return
 
         print(f"Starting LOOT RUN server on ws://{self.host}:{self.port}")
-        async with websockets.serve(self.handle_connection, self.host, self.port):
+        # Use reuse_address=True to allow binding to ports in TIME_WAIT state
+        # This is important for tests that rapidly start/stop servers
+        async with websockets.serve(
+            self.handle_connection, self.host, self.port,
+            reuse_address=True
+        ):
             await asyncio.Future()  # Run forever
 
     async def handle_connection(self, websocket: WebSocketServerProtocol):
@@ -415,10 +420,12 @@ class GameServer:
 def check_port_available(host: str, port: int) -> bool:
     """Check if a port is available for binding.
 
-    Returns True if available, False if in use.
+    Returns True if available, False if in use by another process.
+    Uses SO_REUSEADDR to allow binding to ports in TIME_WAIT state.
     """
     import socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         sock.bind((host if host != "0.0.0.0" else "127.0.0.1", port))
         sock.close()
