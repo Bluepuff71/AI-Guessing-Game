@@ -3,17 +3,17 @@ name: CI
 on:
   push:
     branches:
-      - main
-      - '**'
+      - main  # Post-merge sanity check
   pull_request:
     branches:
-      - main
+      - main  # Full tests for PRs to main
+      - '**'  # Fast tests for PRs to other branches
 
 jobs:
-  # Fast tests run on every push, except PRs to main (full-tests covers those)
+  # Fast tests for PRs to non-main branches, or pushes to main
   fast-tests:
     runs-on: ubuntu-latest
-    if: ${{ !(github.event_name == 'pull_request' && github.base_ref == 'main') }}
+    if: ${{ github.event_name == 'push' || github.base_ref != 'main' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
