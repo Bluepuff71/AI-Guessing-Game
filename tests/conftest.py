@@ -4,12 +4,10 @@ import random
 import tempfile
 from pathlib import Path
 from typing import Dict, List
-from io import StringIO
 from unittest.mock import MagicMock
 
 import pytest
 import numpy as np
-from rich.console import Console
 
 from game.player import Player
 from game.locations import LocationManager, Location
@@ -114,19 +112,6 @@ def temp_config_dir(tmp_path, monkeypatch):
     # Cleanup: reset singleton
     ConfigLoader._instance = None
     ItemShop.ITEMS = None
-
-
-@pytest.fixture
-def mock_console(monkeypatch):
-    """Mock Rich Console for UI tests."""
-    output = StringIO()
-    console = Console(file=output, force_terminal=False, width=80, legacy_windows=False)
-
-    # Replace global console in ui module
-    import game.ui as ui_module
-    monkeypatch.setattr(ui_module, 'console', console)
-
-    return console, output
 
 
 @pytest.fixture
