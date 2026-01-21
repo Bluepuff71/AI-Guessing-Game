@@ -64,8 +64,12 @@ class TestVersionValidation:
         state = GameState()
         handler = MessageHandler(state)
 
+        # Create async adapter for the synchronous handler
+        async def handle_message(msg: Message):
+            handler.handle(msg.type, msg.data)
+
         await connection.connect("ws://127.0.0.1:18770")
-        connection.set_message_handler(handler.handle)
+        connection.set_message_handler(handle_message)
         await connection.start_receiving()
 
         # send_join now includes the VERSION automatically
