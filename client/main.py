@@ -2,6 +2,7 @@
 """Main entry point for LOOT RUN terminal client."""
 
 import asyncio
+import subprocess
 import sys
 from typing import Optional
 
@@ -9,6 +10,8 @@ from client.connection import ConnectionManager
 from client.state import GameState, ClientPhase
 from client.handler import MessageHandler
 from client import ui
+
+DEFAULT_PORT = 8765
 
 
 class GameClient:
@@ -51,8 +54,16 @@ class GameClient:
 
         await self._cleanup()
 
+    def _stop_local_server(self):
+        """Stop the local server subprocess if running."""
+        if self._server_process:
+            self._server_process.terminate()
+            self._server_process = None
+
     async def _play_single_player(self):
         """Start single player game."""
+        self.state.reset_for_new_game()
+
         # Get player name
         ui.clear_screen()
         ui.print_header("Single Player")
@@ -60,7 +71,8 @@ class GameClient:
 
         # Start local server and connect
         await self._start_local_server()
-        if not await self._connect_to_server("localhost", 8765, name):
+        if not await self._connect_to_server("localhost", DEFAULT_PORT, name):
+            self._stop_local_server()
             return
 
         self.state.local_player_ids = [self.state.player_id]
@@ -71,6 +83,8 @@ class GameClient:
 
     async def _play_local_multiplayer(self):
         """Start local multiplayer (hot-seat)."""
+        self.state.reset_for_new_game()
+
         ui.clear_screen()
         ui.print_header("Local Multiplayer")
 
@@ -94,7 +108,8 @@ class GameClient:
         await self._start_local_server()
 
         # Connect first player
-        if not await self._connect_to_server("localhost", 8765, names[0]):
+        if not await self._connect_to_server("localhost", DEFAULT_PORT, names[0]):
+            self._stop_local_server()
             return
 
         self.state.local_player_ids = [self.state.player_id]
@@ -118,7 +133,8 @@ class GameClient:
 
         # Start local server exposed to network
         await self._start_local_server(expose=True)
-        if not await self._connect_to_server("localhost", 8765, name):
+        if not await self._connect_to_server("localhost", DEFAULT_PORT, name):
+            self._stop_local_server()
             return
 
         self.state.local_player_ids = [self.state.player_id]
@@ -138,8 +154,8 @@ class GameClient:
             ui.print_info("LAN discovery not yet implemented. Using localhost.")
             host = "localhost"
 
-        port = 8765
-        port_str = ui.get_input("Port (default 8765): ")
+        port = DEFAULT_PORT
+        port_str = ui.get_input(f"Port (default {DEFAULT_PORT}): ")
         if port_str:
             try:
                 port = int(port_str)
@@ -158,11 +174,9 @@ class GameClient:
 
     async def _start_local_server(self, expose: bool = False):
         """Start local server subprocess."""
-        import subprocess
-
         host = "0.0.0.0" if expose else "127.0.0.1"
         self._server_process = subprocess.Popen(
-            [sys.executable, "-m", "server.main", "--host", host, "--port", "8765"],
+            [sys.executable, "-m", "server.main", "--host", host, "--port", str(DEFAULT_PORT)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
