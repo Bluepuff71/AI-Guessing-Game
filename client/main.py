@@ -51,25 +51,38 @@ class GameClient:
             on_player_update=self._on_player_update,
         )
 
-    async def run(self):
+    def run(self):
         """Run the main client loop."""
         self._running = True
 
         while self._running:
+            # Menu runs outside asyncio to avoid event loop conflicts with questionary
             choice = ui.print_main_menu()
 
             if choice == "1":
-                await self._play_single_player()
+                asyncio.run(self._play_single_player())
             elif choice == "2":
-                await self._play_local_multiplayer()
+                asyncio.run(self._play_local_multiplayer())
             elif choice == "3":
-                await self._host_online_game()
+                asyncio.run(self._play_online_host())
             elif choice == "4":
-                await self._join_online_game()
+                asyncio.run(self._play_online_join())
             elif choice == "5":
                 self._running = False
 
-        await self._cleanup()
+    async def _play_online_host(self):
+        """Wrapper for hosting online game with cleanup."""
+        try:
+            await self._host_online_game()
+        finally:
+            await self._cleanup()
+
+    async def _play_online_join(self):
+        """Wrapper for joining online game with cleanup."""
+        try:
+            await self._join_online_game()
+        finally:
+            await self._cleanup()
 
     def _stop_local_server(self):
         """Stop the local server subprocess if running."""
@@ -608,7 +621,7 @@ def main():
     """Main entry point."""
     client = GameClient()
     try:
-        asyncio.run(client.run())
+        client.run()
     except KeyboardInterrupt:
         pass
 
