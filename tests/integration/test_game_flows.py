@@ -15,7 +15,7 @@ from client.state import GameState, ClientPhase
 from client.handler import MessageHandler
 from version import VERSION
 
-from .conftest import kill_process_on_port
+from .conftest import kill_process_on_port, wait_for_server
 
 
 # Mark all tests in this module as slow and set a timeout
@@ -35,10 +35,20 @@ def game_server():
 
     proc = subprocess.Popen(
         [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", str(port)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
     )
-    time.sleep(1.0)  # Wait for startup
+
+    # Wait for server to be ready
+    if not wait_for_server(port, timeout=10.0):
+        proc.terminate()
+        try:
+            stdout, stderr = proc.communicate(timeout=2)
+            error_msg = stderr.decode() if stderr else "No error output"
+        except Exception:
+            error_msg = "Could not capture error"
+        pytest.fail(f"Server failed to start on port {port}: {error_msg}")
+
     yield f"ws://127.0.0.1:{port}"
     proc.terminate()
     try:
@@ -56,10 +66,20 @@ def game_server_18901():
 
     proc = subprocess.Popen(
         [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", str(port)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
     )
-    time.sleep(1.0)  # Wait for startup
+
+    # Wait for server to be ready
+    if not wait_for_server(port, timeout=10.0):
+        proc.terminate()
+        try:
+            stdout, stderr = proc.communicate(timeout=2)
+            error_msg = stderr.decode() if stderr else "No error output"
+        except Exception:
+            error_msg = "Could not capture error"
+        pytest.fail(f"Server failed to start on port {port}: {error_msg}")
+
     yield f"ws://127.0.0.1:{port}"
     proc.terminate()
     try:

@@ -27,26 +27,27 @@ def kill_process_on_port(port: int) -> None:
         # Port is in use - find and kill the process
         if platform.system() == 'Windows':
             # Get PID using netstat
-            output = subprocess.check_output(
-                f'netstat -ano | findstr ":{port}"',
-                shell=True,
-                stderr=subprocess.DEVNULL
-            ).decode()
+            try:
+                output = subprocess.check_output(
+                    f'netstat -ano | findstr ":{port}"',
+                    shell=True,
+                    stderr=subprocess.DEVNULL
+                ).decode()
 
-            for line in output.strip().split('\n'):
-                if f':{port}' in line and 'LISTENING' in line:
-                    parts = line.split()
-                    pid = parts[-1]
-                    try:
+                for line in output.strip().split('\n'):
+                    if f':{port}' in line and 'LISTENING' in line:
+                        parts = line.split()
+                        pid = parts[-1]
                         subprocess.run(
                             ['taskkill', '/F', '/PID', pid],
                             check=False,
                             capture_output=True
                         )
-                    except Exception:
-                        pass
+            except Exception:
+                pass
         else:
-            # Unix-like systems
+            # Unix-like systems - try multiple methods
+            # Method 1: lsof
             try:
                 output = subprocess.check_output(
                     f'lsof -ti:{port}',
@@ -57,12 +58,45 @@ def kill_process_on_port(port: int) -> None:
                     if pid:
                         subprocess.run(['kill', '-9', pid], check=False, capture_output=True)
             except subprocess.CalledProcessError:
-                pass  # No process found
+                pass
+            except FileNotFoundError:
+                pass
+
+            # Method 2: fuser (fallback)
+            try:
+                subprocess.run(
+                    f'fuser -k {port}/tcp',
+                    shell=True,
+                    check=False,
+                    capture_output=True
+                )
+            except Exception:
+                pass
 
         # Wait for port to be released
-        time.sleep(0.3)
+        time.sleep(0.5)
     except Exception:
         pass  # Best effort - don't fail tests if cleanup fails
+
+
+def wait_for_server(port: int, timeout: float = 5.0) -> bool:
+    """Wait for server to start accepting connections.
+
+    Returns True if server is ready, False if timeout.
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5)
+            result = sock.connect_ex(('127.0.0.1', port))
+            sock.close()
+            if result == 0:
+                return True
+        except Exception:
+            pass
+        time.sleep(0.1)
+    return False
 
 
 def create_server_fixture(port: int):
@@ -73,11 +107,23 @@ def create_server_fixture(port: int):
 
         proc = subprocess.Popen(
             [sys.executable, "-m", "server.main", "--host", "127.0.0.1", "--port", str(port)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
         )
-        time.sleep(1.0)  # Wait for startup
+
+        # Wait for server to be ready (with timeout)
+        if not wait_for_server(port, timeout=10.0):
+            # Server didn't start - capture error output
+            proc.terminate()
+            try:
+                stdout, stderr = proc.communicate(timeout=2)
+                error_msg = stderr.decode() if stderr else "No error output"
+            except Exception:
+                error_msg = "Could not capture error"
+            pytest.fail(f"Server failed to start on port {port}: {error_msg}")
+
         yield proc
+
         proc.terminate()
         try:
             proc.wait(timeout=5)
