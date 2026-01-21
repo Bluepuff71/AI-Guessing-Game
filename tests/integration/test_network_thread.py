@@ -193,7 +193,7 @@ class TestNetworkThreadStop:
         # Stop should not hang
         thread.stop()
 
-        assert thread._running is False
+        assert thread.is_running is False
         assert thread._thread is None
 
     def test_multiple_start_stop_cycles(self, server_process_18780):
@@ -217,5 +217,5 @@ class TestNetworkThreadStop:
                 break
         thread2.stop()
 
-        assert thread._running is False
-        assert thread2._running is False
+        assert thread.is_running is False
+        assert thread2.is_running is False
