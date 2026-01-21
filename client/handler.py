@@ -207,6 +207,7 @@ class MessageHandler:
     async def _handle_game_started(self, data: dict):
         """Handle GAME_STARTED message."""
         self.state.game_id = data.get("game_id")
+        self.state.round_num = 1  # Game starts at round 1
 
         # Update locations
         self.state.locations.clear()
