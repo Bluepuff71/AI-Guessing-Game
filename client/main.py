@@ -8,6 +8,7 @@ This allows questionary UI to work without asyncio conflicts.
 import asyncio
 import subprocess
 import sys
+import threading
 import time
 from typing import Optional, Dict, List
 
@@ -18,6 +19,11 @@ from client.lan import LANDiscovery, DISCOVERY_PORT
 from client import ui
 from utils.process import wait_for_server, is_server_running
 from version import VERSION
+
+
+def _is_frozen() -> bool:
+    """Check if running from a PyInstaller bundled executable."""
+    return getattr(sys, 'frozen', False)
 
 DEFAULT_PORT = 8765
 
@@ -39,7 +45,9 @@ class GameClient:
         self.state = GameState()
         self.handler = MessageHandler(self.state)
         self._running = False
-        self._server_process = None
+        self._server_process = None  # For subprocess mode (non-frozen)
+        self._server_thread = None   # For in-process mode (frozen exe)
+        self._server_stop_event = None  # Event to signal server shutdown
         self._connection_lost = False
 
         # Hot-seat support: map player_id -> NetworkThread
@@ -267,7 +275,10 @@ class GameClient:
             self._cleanup_current_game()
 
     def _start_local_server(self, expose: bool = False) -> bool:
-        """Start local server subprocess.
+        """Start local server.
+
+        When running from source (not frozen), spawns server as subprocess.
+        When running from PyInstaller bundle (frozen), runs server in background thread.
 
         Args:
             expose: If True, bind to 0.0.0.0 (network accessible).
@@ -284,6 +295,59 @@ class GameClient:
             return False
 
         host = "0.0.0.0" if expose else "127.0.0.1"
+
+        if _is_frozen():
+            # Running from PyInstaller bundle - run server in background thread
+            return self._start_server_in_thread(host)
+        else:
+            # Running from source - spawn as subprocess
+            return self._start_server_subprocess(host)
+
+    def _start_server_in_thread(self, host: str) -> bool:
+        """Start server in a background thread (for frozen exe mode)."""
+        from server.main import GameServer
+
+        self._server_stop_event = threading.Event()
+
+        def run_server():
+            """Server thread function."""
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            server = GameServer(host=host, port=DEFAULT_PORT)
+
+            async def serve_until_stopped():
+                """Run server until stop event is set."""
+                import websockets
+                async with websockets.serve(
+                    server.handle_connection, server.host, server.port,
+                    reuse_address=True
+                ):
+                    # Check stop event periodically
+                    while not self._server_stop_event.is_set():
+                        await asyncio.sleep(0.1)
+
+            try:
+                loop.run_until_complete(serve_until_stopped())
+            except Exception:
+                pass
+            finally:
+                loop.close()
+
+        self._server_thread = threading.Thread(target=run_server, daemon=True)
+        self._server_thread.start()
+
+        # Wait for server to start accepting connections
+        if not wait_for_server(DEFAULT_PORT, timeout=5.0):
+            ui.print_error("Server did not start in time.")
+            self._server_stop_event.set()
+            self._server_thread = None
+            self._server_stop_event = None
+            return False
+
+        return True
+
+    def _start_server_subprocess(self, host: str) -> bool:
+        """Start server as subprocess (for non-frozen mode)."""
         self._server_process = subprocess.Popen(
             [sys.executable, "-m", "server.main", "--host", host, "--port", str(DEFAULT_PORT)],
             stdout=subprocess.PIPE,
@@ -314,7 +378,17 @@ class GameClient:
         return True
 
     def _stop_local_server(self):
-        """Stop the local server subprocess if running."""
+        """Stop the local server (subprocess or thread) if running."""
+        # Stop thread-based server (frozen mode)
+        if self._server_thread:
+            if self._server_stop_event:
+                self._server_stop_event.set()
+            # Give thread time to stop gracefully
+            self._server_thread.join(timeout=2.0)
+            self._server_thread = None
+            self._server_stop_event = None
+
+        # Stop subprocess-based server (non-frozen mode)
         if self._server_process:
             self._server_process.terminate()
             try:
