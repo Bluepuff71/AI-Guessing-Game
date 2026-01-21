@@ -7,6 +7,8 @@ import socket
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 
+from version import VERSION
+
 DISCOVERY_PORT = 19132
 BROADCAST_INTERVAL = 2.0
 BUFFER_SIZE = 4096
@@ -22,6 +24,7 @@ class DiscoveredGame:
     host_name: str
     player_count: int
     max_players: int
+    version: str = "unknown"
 
 
 class LANDiscovery:
@@ -73,6 +76,7 @@ class LANDiscovery:
                 "host_name": host_name,
                 "player_count": player_count,
                 "max_players": max_players,
+                "version": VERSION,
             }
 
             # Start broadcast loop
@@ -186,6 +190,7 @@ class LANDiscovery:
                                     host_name=message.get("host_name", "Unknown"),
                                     player_count=message.get("player_count", 0),
                                     max_players=message.get("max_players", DEFAULT_MAX_PLAYERS),
+                                    version=message.get("version", "unknown"),
                                 )
                     except (json.JSONDecodeError, KeyError):
                         # Invalid message, ignore

@@ -421,13 +421,31 @@ def get_server_address() -> str:
 
 
 def select_lan_game(games: list) -> Optional[int]:
-    """Select a game from LAN discovery results. Returns index or None to cancel."""
+    """Select a game from LAN discovery results. Returns index or None to cancel.
+
+    Shows version information for each game and marks incompatible games with
+    a warning indicator when the server version doesn't match the client version.
+    """
     if not games:
         return None
 
     choices = []
     for game in games:
-        choices.append(f"{game.game_name} - {game.host_name} ({game.player_count}/{game.max_players})")
+        # Check version compatibility
+        is_compatible = game.version == VERSION
+        version_display = f"[{game.version}]"
+
+        if is_compatible:
+            version_indicator = ""
+        else:
+            version_indicator = " [!]"
+
+        choice_text = (
+            f"{game.game_name} - {game.host_name} "
+            f"({game.player_count}/{game.max_players}) "
+            f"{version_display}{version_indicator}"
+        )
+        choices.append(choice_text)
     choices.append("Cancel - Return to menu")
 
     result = questionary.select(
