@@ -1,19 +1,16 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main  # Post-merge sanity check
   pull_request:
     branches:
       - main  # Full tests for PRs to main
       - '**'  # Fast tests for PRs to other branches
 
 jobs:
-  # Fast tests for PRs to non-main branches, or pushes to main
+  # Fast tests for PRs to non-main branches only
   fast-tests:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || github.base_ref != 'main' }}
+    if: ${{ github.base_ref != 'main' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,10 +30,10 @@ jobs:
         run: |
           python -m pytest tests/ -m "not slow" --tb=short -q
 
-  # Full test suite runs on PR merge to main
+  # Full test suite runs on PRs to main
   full-tests:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    if: ${{ github.base_ref == 'main' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
