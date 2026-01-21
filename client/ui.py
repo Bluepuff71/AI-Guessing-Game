@@ -7,6 +7,7 @@ from rich.table import Table
 from rich.text import Text
 from rich import box
 from typing import List, Optional, Dict, Any
+import questionary
 
 from client.state import GameState, PlayerInfo, LocationInfo, ClientPhase
 
@@ -28,23 +29,31 @@ def print_header(title: str, subtitle: str = ""):
 
 
 def print_main_menu() -> str:
-    """Print main menu and get choice."""
+    """Print main menu and get choice using arrow key selection."""
     clear_screen()
     print_header("LOOT RUN", "Multiplayer Edition")
-
-    console.print("\n[bold]Choose an option:[/bold]\n")
-    console.print("  [cyan]1.[/cyan] Single Player")
-    console.print("  [cyan]2.[/cyan] Local Multiplayer (Hot-Seat)")
-    console.print("  [cyan]3.[/cyan] Host Online Game")
-    console.print("  [cyan]4.[/cyan] Join Online Game")
-    console.print("  [cyan]5.[/cyan] Quit")
     console.print()
 
-    while True:
-        choice = console.input("[bold]Enter choice (1-5): [/bold]").strip()
-        if choice in ["1", "2", "3", "4", "5"]:
-            return choice
-        console.print("[red]Invalid choice. Please enter 1-5.[/red]")
+    choices = [
+        {"name": "Single Player", "value": "1"},
+        {"name": "Local Multiplayer (Hot-Seat)", "value": "2"},
+        {"name": "Host Online Game", "value": "3"},
+        {"name": "Join Online Game", "value": "4"},
+        {"name": "Quit", "value": "5"},
+    ]
+
+    result = questionary.select(
+        "Choose an option:",
+        choices=[c["name"] for c in choices],
+        use_indicator=True,
+        use_shortcuts=False,
+    ).ask()
+
+    # Map selection back to value
+    for c in choices:
+        if c["name"] == result:
+            return c["value"]
+    return "5"  # Default to quit if something goes wrong
 
 
 def print_lobby(state: GameState, is_host: bool = False):
@@ -128,7 +137,6 @@ def print_location_choice_prompt(state: GameState, player: PlayerInfo):
 
     print_locations(state)
     console.print()
-    console.print(f"[bold]{player.username}[/bold], choose a location to loot (1-{len(state.locations)}):")
 
 
 def print_waiting_for_players(state: GameState, submitted: List[str]):
@@ -174,25 +182,12 @@ def print_round_results(state: GameState, results: Dict[str, Any]):
 
 
 def print_escape_prompt(state: GameState, player: PlayerInfo):
-    """Print escape options."""
+    """Print escape options header."""
     clear_screen()
     print_header("CAUGHT!", f"{player.username} must escape!")
 
     console.print(f"\n[yellow]You were caught at {state.caught_location}![/yellow]")
     console.print(f"[dim]Points at stake: {state.caught_points}[/dim]\n")
-
-    table = Table(title="Escape Options", box=box.ROUNDED)
-    table.add_column("#", style="dim", justify="right")
-    table.add_column("Option", style="cyan")
-    table.add_column("Type", justify="center")
-
-    for i, opt in enumerate(state.escape_options):
-        opt_type = "[blue]Hide[/blue]" if opt.get("type") == "hide" else "[yellow]Run[/yellow]"
-        table.add_row(str(i + 1), f"{opt.get('emoji', '')} {opt.get('name', '')}", opt_type)
-
-    console.print(table)
-    console.print()
-    console.print(f"Choose escape option (1-{len(state.escape_options)}):")
 
 
 def print_escape_result(result: Dict[str, Any]):
@@ -245,35 +240,48 @@ def print_game_over(state: GameState):
 
 
 def print_shop(state: GameState, player: PlayerInfo):
-    """Print shop screen."""
+    """Print shop header."""
     clear_screen()
     print_header("SHOP", f"{player.username}'s Turn - Points: {player.points}")
 
+
+def get_shop_choice(state: GameState, player: PlayerInfo) -> Optional[int]:
+    """Get shop choice from user using arrow key selection. Returns None to skip."""
     owned = set(player.passives)
 
-    table = Table(title="Available Passives", box=box.ROUNDED)
-    table.add_column("#", style="dim", justify="right")
-    table.add_column("Passive", style="cyan")
-    table.add_column("Cost", justify="right")
-    table.add_column("Status", justify="center")
-
-    for i, passive in enumerate(state.available_passives):
+    choices = []
+    for passive in state.available_passives:
         pid = passive.get("id", "")
         name = f"{passive.get('emoji', '')} {passive.get('name', '')}"
         cost = passive.get("cost", 0)
 
         if pid in owned:
-            status = "[green]Owned[/green]"
+            status = "(Owned)"
         elif player.points >= cost:
-            status = "[yellow]Available[/yellow]"
+            status = f"({cost} pts)"
         else:
-            status = "[red]Too expensive[/red]"
+            status = f"({cost} pts - Too expensive)"
 
-        table.add_row(str(i + 1), name, str(cost), status)
+        choices.append(f"{name} {status}")
 
-    console.print(table)
-    console.print()
-    console.print("[dim]Enter number to buy, or 'skip' to continue:[/dim]")
+    choices.append("Skip - Continue to game")
+
+    result = questionary.select(
+        "Buy a passive or skip:",
+        choices=choices,
+        use_indicator=True,
+        use_shortcuts=False,
+    ).ask()
+
+    # Check if skip was selected
+    if result == "Skip - Continue to game":
+        return None
+
+    # Return index of selected passive
+    for i, choice in enumerate(choices[:-1]):  # Exclude "Skip" option
+        if choice == result:
+            return i
+    return None
 
 
 def get_input(prompt: str = "") -> str:
@@ -281,28 +289,48 @@ def get_input(prompt: str = "") -> str:
     return console.input(prompt).strip()
 
 
-def get_location_choice(num_locations: int) -> int:
-    """Get location choice from user."""
-    while True:
-        try:
-            choice = int(get_input())
-            if 1 <= choice <= num_locations:
-                return choice - 1  # Return 0-indexed
-            console.print(f"[red]Please enter a number between 1 and {num_locations}[/red]")
-        except ValueError:
-            console.print("[red]Please enter a valid number[/red]")
+def get_location_choice(state: GameState) -> int:
+    """Get location choice from user using arrow key selection."""
+    choices = []
+    for loc in state.locations:
+        event_str = ""
+        if loc.event:
+            event_str = f" [{loc.event.get('name', '')}]"
+        choices.append(f"{loc.emoji} {loc.name} ({loc.min_points}-{loc.max_points} pts){event_str}")
+
+    result = questionary.select(
+        "Choose a location to loot:",
+        choices=choices,
+        use_indicator=True,
+        use_shortcuts=False,
+    ).ask()
+
+    # Return index of selected location
+    for i, choice in enumerate(choices):
+        if choice == result:
+            return i
+    return 0
 
 
-def get_escape_choice(num_options: int) -> int:
-    """Get escape choice from user."""
-    while True:
-        try:
-            choice = int(get_input())
-            if 1 <= choice <= num_options:
-                return choice - 1  # Return 0-indexed
-            console.print(f"[red]Please enter a number between 1 and {num_options}[/red]")
-        except ValueError:
-            console.print("[red]Please enter a valid number[/red]")
+def get_escape_choice(state: GameState) -> int:
+    """Get escape choice from user using arrow key selection."""
+    choices = []
+    for opt in state.escape_options:
+        opt_type = "[Hide]" if opt.get("type") == "hide" else "[Run]"
+        choices.append(f"{opt.get('emoji', '')} {opt.get('name', '')} {opt_type}")
+
+    result = questionary.select(
+        "Choose your escape:",
+        choices=choices,
+        use_indicator=True,
+        use_shortcuts=False,
+    ).ask()
+
+    # Return index of selected option
+    for i, choice in enumerate(choices):
+        if choice == result:
+            return i
+    return 0
 
 
 def print_connecting(host: str, port: int):
@@ -323,3 +351,95 @@ def print_info(message: str):
 def wait_for_enter():
     """Wait for user to press Enter."""
     console.input()
+
+
+def get_player_count() -> int:
+    """Get number of players for local multiplayer using arrow key selection."""
+    choices = ["2 Players", "3 Players", "4 Players", "5 Players", "6 Players"]
+
+    result = questionary.select(
+        "How many players?",
+        choices=choices,
+        use_indicator=True,
+        use_shortcuts=False,
+    ).ask()
+
+    # Extract number from selection
+    for i, choice in enumerate(choices):
+        if choice == result:
+            return i + 2  # 2-6 players
+    return 2
+
+
+def get_player_name(player_num: int) -> str:
+    """Get player name using text input."""
+    name = questionary.text(
+        f"Player {player_num} name:",
+        default=f"Player {player_num}"
+    ).ask()
+    return name or f"Player {player_num}"
+
+
+def get_host_name() -> str:
+    """Get host player name."""
+    name = questionary.text(
+        "Enter your name:",
+        default="Host"
+    ).ask()
+    return name or "Host"
+
+
+def get_game_name() -> str:
+    """Get game name for hosting."""
+    name = questionary.text(
+        "Game name:",
+        default="LOOT RUN"
+    ).ask()
+    return name or "LOOT RUN"
+
+
+def get_server_address() -> str:
+    """Get server address to join."""
+    choices = ["Scan for LAN games", "Enter IP address manually"]
+
+    result = questionary.select(
+        "How to find game?",
+        choices=choices,
+        use_indicator=True,
+        use_shortcuts=False,
+    ).ask()
+
+    if result == "Scan for LAN games":
+        return "scan"
+    else:
+        addr = questionary.text(
+            "Server IP address:",
+            default="localhost"
+        ).ask()
+        return addr or "localhost"
+
+
+def select_lan_game(games: list) -> Optional[int]:
+    """Select a game from LAN discovery results. Returns index or None to cancel."""
+    if not games:
+        return None
+
+    choices = []
+    for game in games:
+        choices.append(f"{game.game_name} - {game.host_name} ({game.player_count}/{game.max_players})")
+    choices.append("Cancel - Return to menu")
+
+    result = questionary.select(
+        "Select a game to join:",
+        choices=choices,
+        use_indicator=True,
+        use_shortcuts=False,
+    ).ask()
+
+    if result == "Cancel - Return to menu":
+        return None
+
+    for i, choice in enumerate(choices[:-1]):
+        if choice == result:
+            return i
+    return None

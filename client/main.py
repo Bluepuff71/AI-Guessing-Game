@@ -143,7 +143,7 @@ class GameClient:
         # Get player name
         ui.clear_screen()
         ui.print_header("Single Player")
-        name = ui.get_input("Enter your name: ") or "Player"
+        name = ui.get_player_name(1)
 
         # Start local server and connect
         await self._start_local_server()
@@ -174,19 +174,12 @@ class GameClient:
         ui.print_header("Local Multiplayer")
 
         # Get number of players
-        while True:
-            try:
-                num = int(ui.get_input("Number of players (2-6): "))
-                if 2 <= num <= 6:
-                    break
-                ui.print_error("Please enter a number between 2 and 6")
-            except ValueError:
-                ui.print_error("Please enter a valid number")
+        num = ui.get_player_count()
 
         # Get player names
         names = []
         for i in range(num):
-            name = ui.get_input(f"Player {i+1} name: ") or f"Player {i+1}"
+            name = ui.get_player_name(i + 1)
             names.append(name)
 
         # Start local server
@@ -246,15 +239,23 @@ class GameClient:
 
     async def _host_online_game(self):
         """Host an online game."""
+        self.state.reset_for_new_game()
         self._reset_connection_state()
         ui.clear_screen()
         ui.print_header("Host Online Game")
-        name = ui.get_input("Enter your name: ") or "Host"
-        game_name = ui.get_input("Game name (default: LOOT RUN): ") or "LOOT RUN"
+        name = ui.get_host_name()
+        game_name = ui.get_game_name()
 
         # Start local server exposed to network
+        ui.print_info("Starting server...")
         await self._start_local_server(expose=True)
+
+        # Give server more time to start
+        await asyncio.sleep(1.0)
+
         if not await self._connect_to_server("localhost", DEFAULT_PORT, name):
+            ui.print_error("Failed to connect to local server. Please try again.")
+            ui.wait_for_enter()
             self._stop_local_server()
             return
 
@@ -283,15 +284,15 @@ class GameClient:
 
     async def _join_online_game(self):
         """Join an online game."""
+        self.state.reset_for_new_game()
         self._reset_connection_state()
         ui.clear_screen()
         ui.print_header("Join Online Game")
 
         # Get server address
-        host = ui.get_input("Server IP (or 'scan' for LAN): ") or "localhost"
+        host = ui.get_server_address()
         port = DEFAULT_PORT
 
-        selected_from_scan = False
         if host.lower() == "scan":
             # LAN discovery
             ui.print_info("Scanning for LAN games...")
@@ -299,41 +300,18 @@ class GameClient:
 
             if not games:
                 ui.print_error("No games found on LAN.")
-                host = ui.get_input("Enter server IP manually: ") or "localhost"
+                ui.wait_for_enter()
+                return
             else:
-                ui.print_info(f"Found {len(games)} game(s):")
-                for i, game in enumerate(games, 1):
-                    ui.print_info(
-                        f"  {i}. {game.game_name} - hosted by {game.host_name} "
-                        f"({game.player_count}/{game.max_players} players) at {game.host}:{game.port}"
-                    )
-
                 # Let user select a game
-                choice = ui.get_input("Select game (number) or enter IP: ")
-                try:
-                    idx = int(choice) - 1
-                    if 0 <= idx < len(games):
-                        selected = games[idx]
-                        host = selected.host
-                        port = selected.port
-                        selected_from_scan = True
-                    else:
-                        ui.print_error("Invalid selection.")
-                        return
-                except ValueError:
-                    # User entered an IP address
-                    host = choice if choice else "localhost"
+                idx = ui.select_lan_game(games)
+                if idx is None:
+                    return  # User cancelled
+                selected = games[idx]
+                host = selected.host
+                port = selected.port
 
-        # Get port if not selected from scan
-        if not selected_from_scan:
-            port_str = ui.get_input(f"Port (default {DEFAULT_PORT}): ")
-            if port_str:
-                try:
-                    port = int(port_str)
-                except ValueError:
-                    pass
-
-        name = ui.get_input("Enter your name: ") or "Player"
+        name = ui.get_player_name(1)
 
         if not await self._connect_to_server(host, port, name):
             return
@@ -564,7 +542,7 @@ class GameClient:
             self.state.current_local_player_index = i
             ui.print_location_choice_prompt(self.state, player)
 
-            choice = ui.get_location_choice(len(self.state.locations))
+            choice = ui.get_location_choice(self.state)
             choices[pid] = choice
 
         # All choices collected - now send them all
@@ -592,7 +570,7 @@ class GameClient:
         conn = self._local_connections.get(player_id, self.connection)
 
         ui.print_escape_prompt(self.state, player)
-        choice_idx = ui.get_escape_choice(len(self.state.escape_options))
+        choice_idx = ui.get_escape_choice(self.state)
         option_id = self.state.escape_options[choice_idx].get("id")
         if not await self._safe_send(conn, conn.send_escape_choice(option_id)):
             raise ConnectionLostError("Connection lost while submitting escape choice")
