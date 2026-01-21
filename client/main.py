@@ -9,6 +9,7 @@ from typing import Optional, Dict, List
 from client.connection import ConnectionManager
 from client.state import GameState, ClientPhase
 from client.handler import MessageHandler
+from client.lan import LANDiscovery, DISCOVERY_PORT
 from client import ui
 
 DEFAULT_PORT = 8765
@@ -29,6 +30,9 @@ class GameClient:
         # The primary connection (self.connection) is also stored here for the first player.
         # This allows uniform message routing via _local_connections.get(pid, self.connection).
         self._local_connections: Dict[str, ConnectionManager] = {}
+
+        # LAN discovery
+        self._lan_discovery = LANDiscovery()
 
         # Set up callbacks
         self.handler.set_callbacks(
@@ -161,6 +165,7 @@ class GameClient:
         ui.clear_screen()
         ui.print_header("Host Online Game")
         name = ui.get_input("Enter your name: ") or "Host"
+        game_name = ui.get_input("Game name (default: LOOT RUN): ") or "LOOT RUN"
 
         # Start local server exposed to network
         await self._start_local_server(expose=True)
@@ -170,8 +175,23 @@ class GameClient:
 
         self.state.local_player_ids = [self.state.player_id]
 
-        # Show lobby and wait for ready
-        await self._lobby_loop(is_host=True)
+        # Start LAN broadcasting
+        broadcasting = await self._lan_discovery.start_broadcasting(
+            port=DEFAULT_PORT,
+            game_name=game_name,
+            host_name=name,
+            player_count=1,
+            max_players=6
+        )
+        if broadcasting:
+            ui.print_info(f"Broadcasting game on LAN (port {DISCOVERY_PORT})")
+
+        try:
+            # Show lobby and wait for ready
+            await self._lobby_loop(is_host=True)
+        finally:
+            # Stop broadcasting when done
+            await self._lan_discovery.stop_broadcasting()
 
     async def _join_online_game(self):
         """Join an online game."""
@@ -180,18 +200,49 @@ class GameClient:
 
         # Get server address
         host = ui.get_input("Server IP (or 'scan' for LAN): ") or "localhost"
-        if host == "scan":
-            # TODO: LAN discovery
-            ui.print_info("LAN discovery not yet implemented. Using localhost.")
-            host = "localhost"
-
         port = DEFAULT_PORT
-        port_str = ui.get_input(f"Port (default {DEFAULT_PORT}): ")
-        if port_str:
-            try:
-                port = int(port_str)
-            except ValueError:
-                pass
+
+        selected_from_scan = False
+        if host.lower() == "scan":
+            # LAN discovery
+            ui.print_info("Scanning for LAN games...")
+            games = await self._lan_discovery.scan_for_games(timeout=3.0)
+
+            if not games:
+                ui.print_error("No games found on LAN.")
+                host = ui.get_input("Enter server IP manually: ") or "localhost"
+            else:
+                ui.print_info(f"Found {len(games)} game(s):")
+                for i, game in enumerate(games, 1):
+                    ui.print_info(
+                        f"  {i}. {game.game_name} - hosted by {game.host_name} "
+                        f"({game.player_count}/{game.max_players} players) at {game.host}:{game.port}"
+                    )
+
+                # Let user select a game
+                choice = ui.get_input("Select game (number) or enter IP: ")
+                try:
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(games):
+                        selected = games[idx]
+                        host = selected.host
+                        port = selected.port
+                        selected_from_scan = True
+                    else:
+                        ui.print_error("Invalid selection.")
+                        return
+                except ValueError:
+                    # User entered an IP address
+                    host = choice if choice else "localhost"
+
+        # Get port if not selected from scan
+        if not selected_from_scan:
+            port_str = ui.get_input(f"Port (default {DEFAULT_PORT}): ")
+            if port_str:
+                try:
+                    port = int(port_str)
+                except ValueError:
+                    pass
 
         name = ui.get_input("Enter your name: ") or "Player"
 
