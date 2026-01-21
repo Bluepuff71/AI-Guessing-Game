@@ -5,10 +5,12 @@ import asyncio
 import json
 import socket
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 DISCOVERY_PORT = 19132
 BROADCAST_INTERVAL = 2.0
+BUFFER_SIZE = 4096
+DEFAULT_MAX_PLAYERS = 6
 
 
 @dataclass
@@ -29,6 +31,7 @@ class LANDiscovery:
         self._broadcasting = False
         self._broadcast_task: Optional[asyncio.Task] = None
         self._broadcast_socket: Optional[socket.socket] = None
+        self._broadcast_data: Optional[Dict[str, Any]] = None
 
     async def start_broadcasting(
         self,
@@ -85,19 +88,20 @@ class LANDiscovery:
 
     def update_player_count(self, player_count: int):
         """Update the player count in broadcast data."""
-        if self._broadcasting and hasattr(self, '_broadcast_data'):
+        if self._broadcasting and self._broadcast_data:
             self._broadcast_data["player_count"] = player_count
 
     async def _broadcast_loop(self):
         """Continuously broadcast game info."""
         while self._broadcasting:
             try:
-                if self._broadcast_socket and hasattr(self, '_broadcast_data'):
+                if self._broadcast_socket and self._broadcast_data:
                     message = json.dumps(self._broadcast_data).encode('utf-8')
                     # Broadcast to all addresses on the network
+                    # Use 255.255.255.255 for cross-platform compatibility
                     self._broadcast_socket.sendto(
                         message,
-                        ('<broadcast>', DISCOVERY_PORT)
+                        ('255.255.255.255', DISCOVERY_PORT)
                     )
             except OSError:
                 # Socket error, stop broadcasting
@@ -136,7 +140,8 @@ class LANDiscovery:
         Returns:
             List of discovered games
         """
-        discovered: dict[str, DiscoveredGame] = {}  # key: host:port to avoid duplicates
+        discovered: Dict[str, DiscoveredGame] = {}  # key: host:port to avoid duplicates
+        sock: Optional[socket.socket] = None
 
         try:
             # Create UDP socket for receiving broadcasts
@@ -150,7 +155,7 @@ class LANDiscovery:
                 # Port might be in use, try binding to any available port
                 sock.bind(('', 0))
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             end_time = loop.time() + timeout
 
             while loop.time() < end_time:
@@ -161,7 +166,7 @@ class LANDiscovery:
                 try:
                     # Wait for data with timeout
                     data, addr = await asyncio.wait_for(
-                        loop.run_in_executor(None, lambda: sock.recvfrom(4096)),
+                        loop.run_in_executor(None, lambda: sock.recvfrom(BUFFER_SIZE)),
                         timeout=min(remaining, 0.5)
                     )
 
@@ -180,7 +185,7 @@ class LANDiscovery:
                                     game_name=message.get("game_name", "Unknown"),
                                     host_name=message.get("host_name", "Unknown"),
                                     player_count=message.get("player_count", 0),
-                                    max_players=message.get("max_players", 6),
+                                    max_players=message.get("max_players", DEFAULT_MAX_PLAYERS),
                                 )
                     except (json.JSONDecodeError, KeyError):
                         # Invalid message, ignore
@@ -200,9 +205,10 @@ class LANDiscovery:
             # Failed to create socket
             pass
         finally:
-            try:
-                sock.close()
-            except Exception:
-                pass
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
 
         return list(discovered.values())
