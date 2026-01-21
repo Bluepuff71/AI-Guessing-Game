@@ -4,7 +4,7 @@
 import asyncio
 import subprocess
 import sys
-from typing import Optional
+from typing import Optional, Dict, List
 
 from client.connection import ConnectionManager
 from client.state import GameState, ClientPhase
@@ -18,11 +18,17 @@ class GameClient:
     """Main game client application."""
 
     def __init__(self):
-        self.connection = ConnectionManager()
+        self.connection = ConnectionManager()  # Primary connection
         self.state = GameState()
         self.handler = MessageHandler(self.state)
         self._running = False
         self._server_process = None
+
+        # Hot-seat support: map player_id -> connection
+        # In hot-seat mode, each local player has their own connection to the server.
+        # The primary connection (self.connection) is also stored here for the first player.
+        # This allows uniform message routing via _local_connections.get(pid, self.connection).
+        self._local_connections: Dict[str, ConnectionManager] = {}
 
         # Set up callbacks
         self.handler.set_callbacks(
@@ -84,6 +90,7 @@ class GameClient:
     async def _play_local_multiplayer(self):
         """Start local multiplayer (hot-seat)."""
         self.state.reset_for_new_game()
+        self._local_connections.clear()
 
         ui.clear_screen()
         ui.print_header("Local Multiplayer")
@@ -107,22 +114,46 @@ class GameClient:
         # Start local server
         await self._start_local_server()
 
-        # Connect first player
+        # Connect first player (primary connection receives state updates)
         if not await self._connect_to_server("localhost", DEFAULT_PORT, names[0]):
             self._stop_local_server()
             return
 
-        self.state.local_player_ids = [self.state.player_id]
+        first_player_id = self.state.player_id
+        self.state.local_player_ids = [first_player_id]
+        self._local_connections[first_player_id] = self.connection
 
-        # For hot-seat, we track all players but use one connection
-        # The server treats each "join" as a new player
-        # We need to modify this for proper hot-seat...
+        # Connect additional players for hot-seat
+        connection_failed = False
+        for i in range(1, num):
+            player_id = await self._connect_additional_player("localhost", DEFAULT_PORT, names[i])
+            if player_id:
+                self.state.local_player_ids.append(player_id)
+            else:
+                connection_failed = True
+                ui.print_error(f"Failed to connect all players. Aborting.")
+                break
 
-        # For now, single connection handles multiple local players
-        # Server needs modification to support this properly
-        # This is a placeholder implementation
+        # If any connection failed, clean up and abort
+        if connection_failed:
+            for conn in self._local_connections.values():
+                await conn.disconnect()
+            self._local_connections.clear()
+            self._stop_local_server()
+            return
 
-        await self.connection.send_ready()
+        # Mark all local player_ids as local in state
+        for pid in self.state.local_player_ids:
+            if pid in self.state.players:
+                self.state.players[pid].is_local = True
+
+        ui.print_info(f"All {num} players connected!")
+        await asyncio.sleep(0.5)
+
+        # All players ready up
+        for pid, conn in self._local_connections.items():
+            await conn.send_ready()
+
         await self._game_loop()
 
     async def _host_online_game(self):
@@ -209,6 +240,47 @@ class GameClient:
             ui.print_error(f"Failed to connect: {e}")
             return False
 
+    async def _connect_additional_player(self, host: str, port: int, username: str) -> Optional[str]:
+        """Connect an additional player for hot-seat mode.
+
+        Returns the player_id if successful, None otherwise.
+        """
+        conn = ConnectionManager()
+
+        # Temporary state to capture this player's ID
+        temp_player_id = None
+
+        async def capture_welcome(msg):
+            nonlocal temp_player_id
+            if msg.type == "WELCOME":
+                temp_player_id = msg.data.get("player_id")
+            # Also pass to main handler to update player list
+            await self.handler.handle(msg)
+
+        try:
+            await conn.connect(f"ws://{host}:{port}")
+            conn.set_message_handler(capture_welcome)
+            await conn.start_receiving()
+
+            await conn.send_join(username)
+
+            # Wait for welcome
+            for _ in range(50):  # 5 second timeout
+                await asyncio.sleep(0.1)
+                if temp_player_id:
+                    self._local_connections[temp_player_id] = conn
+                    ui.print_info(f"  {username} connected!")
+                    return temp_player_id
+
+            ui.print_error(f"Timeout connecting {username}")
+            await conn.disconnect()
+            return None
+
+        except Exception as e:
+            ui.print_error(f"Failed to connect {username}: {e}")
+            await conn.disconnect()  # Ensure cleanup on exception
+            return None
+
     async def _lobby_loop(self, is_host: bool):
         """Run lobby waiting loop."""
         self.state.phase = ClientPhase.LOBBY
@@ -253,50 +325,76 @@ class GameClient:
             await self._handle_choosing_phase()
 
     async def _handle_shop_phase(self):
-        """Handle shop phase."""
-        player = self.state.current_local_player
-        if not player or not player.alive:
-            await self.connection.send_skip_shop()
-            return
-
-        ui.print_shop(self.state, player)
-
-        while self.state.phase == ClientPhase.SHOP:
-            inp = ui.get_input("> ").lower()
-
-            if inp == "skip" or inp == "s":
-                await self.connection.send_skip_shop()
-                break
-
-            try:
-                idx = int(inp) - 1
-                if 0 <= idx < len(self.state.available_passives):
-                    passive = self.state.available_passives[idx]
-                    await self.connection.send_shop_purchase(passive.get("id"))
-                    await asyncio.sleep(0.2)  # Wait for result
-                    ui.print_shop(self.state, player)
-            except ValueError:
-                pass
-
-    async def _handle_choosing_phase(self):
-        """Handle location choosing phase."""
-        # For each local player
+        """Handle shop phase for all local players."""
+        # For hot-seat, each local player gets a shop turn
         for i, pid in enumerate(self.state.local_player_ids):
             player = self.state.players.get(pid)
+            conn = self._local_connections.get(pid, self.connection)
+
+            if not player or not player.alive:
+                await conn.send_skip_shop()
+                continue
+
+            # If multiple players, clear screen between turns
+            if i > 0:
+                ui.clear_screen()
+                ui.print_info(f"{player.username}'s turn to shop...")
+                ui.wait_for_enter()
+
+            self.state.current_local_player_index = i
+            ui.print_shop(self.state, player)
+
+            # Shop loop for this player
+            shopping = True
+            while shopping and self.state.phase == ClientPhase.SHOP:
+                inp = ui.get_input("> ").lower()
+
+                if inp == "skip" or inp == "s":
+                    await conn.send_skip_shop()
+                    shopping = False
+
+                else:
+                    try:
+                        idx = int(inp) - 1
+                        if 0 <= idx < len(self.state.available_passives):
+                            passive = self.state.available_passives[idx]
+                            await conn.send_shop_purchase(passive.get("id"))
+                            await asyncio.sleep(0.2)  # Wait for result
+                            ui.print_shop(self.state, player)
+                    except ValueError:
+                        pass
+
+    async def _handle_choosing_phase(self):
+        """Handle location choosing phase for all local players.
+
+        Collects all choices first, then sends them together.
+        This prevents the server from seeing partial submissions.
+        """
+        # Collect choices from all local players
+        choices: Dict[str, int] = {}  # player_id -> location choice
+
+        for i, pid in enumerate(self.state.local_player_ids):
+            player = self.state.players.get(pid)
+
             if not player or not player.alive:
                 continue
+
+            # If multiple players, clear screen between turns
+            if i > 0:
+                ui.clear_screen()
+                ui.print_info(f"Pass to {player.username}...")
+                ui.wait_for_enter()
 
             self.state.current_local_player_index = i
             ui.print_location_choice_prompt(self.state, player)
 
             choice = ui.get_location_choice(len(self.state.locations))
-            await self.connection.send_location_choice(choice)
+            choices[pid] = choice
 
-            # If more players, clear screen for next
-            if i < len(self.state.local_player_ids) - 1:
-                ui.clear_screen()
-                ui.print_info("Pass to next player...")
-                ui.wait_for_enter()
+        # All choices collected - now send them all
+        for pid, choice in choices.items():
+            conn = self._local_connections.get(pid, self.connection)
+            await conn.send_location_choice(choice)
 
     async def _on_round_result(self, results: dict):
         """Handle round results."""
@@ -304,16 +402,19 @@ class GameClient:
         ui.wait_for_enter()
 
     async def _on_escape_required(self, data: dict):
-        """Handle escape phase."""
+        """Handle escape phase for a caught player."""
         player_id = data.get("player_id")
         player = self.state.players.get(player_id)
         if not player:
             return
 
+        # Use the correct connection for this player
+        conn = self._local_connections.get(player_id, self.connection)
+
         ui.print_escape_prompt(self.state, player)
         choice_idx = ui.get_escape_choice(len(self.state.escape_options))
         option_id = self.state.escape_options[choice_idx].get("id")
-        await self.connection.send_escape_choice(option_id)
+        await conn.send_escape_choice(option_id)
 
     async def _on_escape_result(self, result: dict):
         """Handle escape result."""
@@ -331,6 +432,12 @@ class GameClient:
 
     async def _cleanup(self):
         """Clean up resources."""
+        # Disconnect all local connections (for hot-seat)
+        for conn in self._local_connections.values():
+            if conn != self.connection:  # Don't disconnect primary twice
+                await conn.disconnect()
+        self._local_connections.clear()
+
         await self.connection.disconnect()
 
         if self._server_process:
