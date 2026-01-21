@@ -99,7 +99,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Exclude test frameworks and test directory
+        # Exclude test frameworks and test files
         'pytest',
         'pytest_cov',
         'pytest_mock',
@@ -108,6 +108,9 @@ a = Analysis(
         'unittest',
         'tests',
         'conftest',
+        'test_*',
+        # Exclude docs and plans
+        'docs',
         # Exclude tkinter (not used)
         'tkinter',
         '_tkinter',
