@@ -16,6 +16,7 @@ from client.state import GameState, ClientPhase
 from client.handler import MessageHandler
 from client.lan import LANDiscovery, DISCOVERY_PORT
 from client import ui
+from utils.process import wait_for_server, is_server_running
 from version import VERSION
 
 DEFAULT_PORT = 8765
@@ -80,7 +81,9 @@ class GameClient:
         name = ui.get_player_name(1)
 
         # Start local server and connect
-        self._start_local_server()
+        if not self._start_local_server():
+            ui.wait_for_enter()
+            return
 
         network = NetworkThread()
         if not self._connect_and_join(network, "localhost", DEFAULT_PORT, name):
@@ -120,7 +123,9 @@ class GameClient:
             names.append(name)
 
         # Start local server
-        self._start_local_server()
+        if not self._start_local_server():
+            ui.wait_for_enter()
+            return
 
         # Connect first player (primary connection receives state updates)
         network = NetworkThread()
@@ -179,10 +184,9 @@ class GameClient:
 
         # Start local server exposed to network
         ui.print_info("Starting server...")
-        self._start_local_server(expose=True)
-
-        # Give server more time to start
-        time.sleep(1.0)
+        if not self._start_local_server(expose=True):
+            ui.wait_for_enter()
+            return
 
         network = NetworkThread()
         if not self._connect_and_join(network, "localhost", DEFAULT_PORT, name):
@@ -262,22 +266,64 @@ class GameClient:
         finally:
             self._cleanup_current_game()
 
-    def _start_local_server(self, expose: bool = False):
-        """Start local server subprocess."""
+    def _start_local_server(self, expose: bool = False) -> bool:
+        """Start local server subprocess.
+
+        Args:
+            expose: If True, bind to 0.0.0.0 (network accessible).
+                   If False, bind to 127.0.0.1 (localhost only).
+
+        Returns:
+            True if server started successfully, False otherwise.
+        """
+        # Check if a server is already running on this port
+        if is_server_running(DEFAULT_PORT):
+            ui.print_error(f"A server is already running on port {DEFAULT_PORT}.")
+            ui.print_info("This could be from a previous game session.")
+            ui.print_info("Please close any existing LOOT RUN servers and try again.")
+            return False
+
         host = "0.0.0.0" if expose else "127.0.0.1"
         self._server_process = subprocess.Popen(
             [sys.executable, "-m", "server.main", "--host", host, "--port", str(DEFAULT_PORT)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
         )
 
-        # Wait for server to start
-        time.sleep(0.5)
+        # Wait for server to start accepting connections
+        if not wait_for_server(DEFAULT_PORT, timeout=5.0):
+            # Server didn't start - check if process is still running
+            poll_result = self._server_process.poll()
+            if poll_result is not None:
+                # Process exited - try to get error message
+                try:
+                    stdout, stderr = self._server_process.communicate(timeout=1)
+                    error_output = stdout.decode().strip() if stdout else ""
+                    if "already running" in error_output.lower():
+                        ui.print_error("Another LOOT RUN server is already running.")
+                    else:
+                        ui.print_error(f"Server failed to start: {error_output}")
+                except Exception:
+                    ui.print_error("Server process exited unexpectedly.")
+            else:
+                ui.print_error("Server did not start in time.")
+                self._server_process.terminate()
+            self._server_process = None
+            return False
+
+        return True
 
     def _stop_local_server(self):
         """Stop the local server subprocess if running."""
         if self._server_process:
             self._server_process.terminate()
+            try:
+                # Wait for process to actually exit
+                self._server_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                # Force kill if it doesn't terminate gracefully
+                self._server_process.kill()
+                self._server_process.wait()
             self._server_process = None
 
     def _reset_connection_state(self):

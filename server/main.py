@@ -447,16 +447,33 @@ def main():
         print("Install with: pip install websockets")
         return 1
 
-    # Check if port is already in use
-    if not check_port_available(args.host, args.port):
-        print(f"ERROR: Port {args.port} is already in use.")
-        print("Another server may be running. Try:")
-        print(f"  1. Stop the other server")
-        print(f"  2. Use a different port: --port {args.port + 1}")
+    # Try to acquire server lock (prevents multiple instances)
+    from utils.process import ServerLock
+    lock = ServerLock(port=args.port)
+
+    if not lock.acquire():
+        existing_pid = lock.get_existing_pid()
+        print(f"ERROR: Another LOOT RUN server is already running on port {args.port}.")
+        if existing_pid:
+            print(f"  Existing server PID: {existing_pid}")
+        print("  Stop the other server first, or use a different port:")
+        print(f"  --port {args.port + 1}")
         return 1
 
-    server = GameServer(host=args.host, port=args.port)
-    asyncio.run(server.start())
+    # Also check if port is available (another app might be using it)
+    if not check_port_available(args.host, args.port):
+        lock.release()
+        print(f"ERROR: Port {args.port} is already in use by another application.")
+        print("Try a different port:")
+        print(f"  --port {args.port + 1}")
+        return 1
+
+    try:
+        server = GameServer(host=args.host, port=args.port)
+        asyncio.run(server.start())
+    finally:
+        lock.release()
+
     return 0
 
 
