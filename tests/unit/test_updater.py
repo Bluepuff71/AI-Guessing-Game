@@ -162,9 +162,9 @@ class TestLaunchNewExecutable:
 
         # Mock Windows-specific subprocess constants when running on non-Windows
         if not hasattr(subprocess, 'DETACHED_PROCESS'):
-            monkeypatch.setattr(subprocess, 'DETACHED_PROCESS', 0x00000008)
+            subprocess.DETACHED_PROCESS = 0x00000008
         if not hasattr(subprocess, 'CREATE_NEW_PROCESS_GROUP'):
-            monkeypatch.setattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x00000200)
+            subprocess.CREATE_NEW_PROCESS_GROUP = 0x00000200
 
         new_exe = tmp_path / "LootRun_new.exe"
         new_exe.write_bytes(b"new exe")
@@ -204,9 +204,9 @@ class TestLaunchNewExecutable:
 
         # Mock Windows-specific subprocess constants when running on non-Windows
         if not hasattr(subprocess, 'DETACHED_PROCESS'):
-            monkeypatch.setattr(subprocess, 'DETACHED_PROCESS', 0x00000008)
+            subprocess.DETACHED_PROCESS = 0x00000008
         if not hasattr(subprocess, 'CREATE_NEW_PROCESS_GROUP'):
-            monkeypatch.setattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x00000200)
+            subprocess.CREATE_NEW_PROCESS_GROUP = 0x00000200
 
         new_exe = tmp_path / "LootRun_new.exe"
         old_exe = tmp_path / "LootRun.exe"
@@ -298,9 +298,9 @@ class TestRestartWithoutFlag:
 
         # Mock Windows-specific subprocess constants when running on non-Windows
         if not hasattr(subprocess, 'DETACHED_PROCESS'):
-            monkeypatch.setattr(subprocess, 'DETACHED_PROCESS', 0x00000008)
+            subprocess.DETACHED_PROCESS = 0x00000008
         if not hasattr(subprocess, 'CREATE_NEW_PROCESS_GROUP'):
-            monkeypatch.setattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x00000200)
+            subprocess.CREATE_NEW_PROCESS_GROUP = 0x00000200
 
         new_path = tmp_path / "LootRun.exe"
 
