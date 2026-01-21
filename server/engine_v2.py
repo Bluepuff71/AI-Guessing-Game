@@ -22,7 +22,7 @@ from ai.escape_predictor import EscapePredictor
 
 from server.protocol import (
     GamePhase, Message, ServerMessageType,
-    game_started_message, round_start_message, phase_change_message,
+    game_state_message, game_started_message, round_start_message, phase_change_message,
     player_submitted_message, all_choices_locked_message, player_timeout_message,
     ai_analyzing_message, round_result_message, player_caught_message,
     escape_phase_message, escape_result_message, player_eliminated_message,
@@ -183,6 +183,37 @@ class EventDrivenGameEngine:
         """Get all connected players."""
         return [p for p in self.players.values() if p.connected]
 
+    def all_players_ready(self) -> bool:
+        """Check if all connected players are ready.
+
+        Allows single player mode (1 player) or multiplayer (2+ players).
+        """
+        connected = self.connected_players
+        return len(connected) >= 1 and all(p.ready for p in connected)
+
+    async def send_game_state(self, player_id: str) -> None:
+        """Send full game state to a player (for reconnection)."""
+        await self.send_to_player(player_id, game_state_message(
+            game_id=self.game_id,
+            phase=self._phase.value,
+            round_num=self.round_num,
+            players=[p.to_public_dict() for p in self.players.values()],
+            locations=[{
+                "name": loc.name,
+                "emoji": loc.emoji,
+                "min_points": loc.min_points,
+                "max_points": loc.max_points,
+            } for loc in self.location_manager.get_all()],
+            active_events=self._build_active_events(),
+            settings={
+                "turn_timer": self.turn_timer_seconds,
+                "escape_timer": self.escape_timer_seconds,
+                "shop_timer": self.shop_timer_seconds,
+                "win_threshold": self.win_threshold,
+            },
+            previous_ai_location=self.last_ai_search_location.name if self.last_ai_search_location else None
+        ))
+
     async def handle_event(self, event: GameEvent) -> None:
         """Handle an incoming event. Never blocks."""
         handler = self._handlers.get(event.type)
@@ -244,6 +275,29 @@ class EventDrivenGameEngine:
             return
 
         self.started_at = datetime.now(timezone.utc)
+
+        # Build location data
+        locations = [{
+            "name": loc.name,
+            "emoji": loc.emoji,
+            "min_points": loc.min_points,
+            "max_points": loc.max_points,
+        } for loc in self.location_manager.get_all()]
+
+        # Broadcast game started
+        await self.broadcast(game_started_message(
+            game_id=self.game_id,
+            players=[p.to_public_dict() for p in self.players.values()],
+            locations=locations,
+            ai_status={"name": "AI Opponent", "difficulty": "normal"},
+            settings={
+                "turn_timer": self.turn_timer_seconds,
+                "escape_timer": self.escape_timer_seconds,
+                "shop_timer": self.shop_timer_seconds,
+                "win_threshold": self.win_threshold,
+            }
+        ))
+
         await self._start_round()
 
     # --- Shop Phase ---

@@ -30,7 +30,8 @@ from server.protocol import (
     parse_join_message, parse_reconnect_message, parse_location_choice_message,
     parse_escape_choice_message, parse_shop_purchase_message
 )
-from server.engine import ServerGameEngine
+from server.engine_v2 import EventDrivenGameEngine
+from server.events import GameEvent, GameEventType
 from version import VERSION
 
 
@@ -63,7 +64,7 @@ class GameServer:
         self.websocket_to_player: Dict[WebSocketServerProtocol, str] = {}
 
         # Game management
-        self.games: Dict[str, ServerGameEngine] = {}  # game_id -> engine
+        self.games: Dict[str, EventDrivenGameEngine] = {}  # game_id -> engine
         self.player_to_game: Dict[str, str] = {}  # player_id -> game_id
 
         # Lobby (players waiting to be matched or creating games)
@@ -185,19 +186,29 @@ class GameServer:
         """Find an existing game to join or create a new one."""
         # Look for a game that hasn't started yet and has room
         for game_id, game in self.games.items():
-            if game.current_phase.value == "lobby" and len(game.players) < 6:
+            if game.phase.value == "lobby" and len(game.players) < 6:
                 # Join this game
-                await game.add_player(player_id, username, profile_id)
+                event = GameEvent(
+                    type=GameEventType.PLAYER_JOIN,
+                    player_id=player_id,
+                    data={"username": username, "profile_id": profile_id}
+                )
+                await game.handle_event(event)
                 return game_id
 
         # Create new game
         game_id = str(uuid.uuid4())[:8]
-        game = ServerGameEngine(
+        game = EventDrivenGameEngine(
             game_id=game_id,
             broadcast=lambda msg: self.broadcast_to_game(game_id, msg),
             send_to_player=lambda pid, msg: self.send_to_player(pid, msg)
         )
-        await game.add_player(player_id, username, profile_id)
+        event = GameEvent(
+            type=GameEventType.PLAYER_JOIN,
+            player_id=player_id,
+            data={"username": username, "profile_id": profile_id}
+        )
+        await game.handle_event(event)
         self.games[game_id] = game
 
         return game_id
@@ -213,7 +224,7 @@ class GameServer:
             return
 
         game = self.games[game_id]
-        player = game.get_player(player_id)
+        player = game.players.get(player_id)
 
         if not player:
             await self.send_to_websocket(websocket, error_message("PLAYER_NOT_FOUND", "Player not found in game"))
@@ -248,9 +259,13 @@ class GameServer:
             return
 
         game = self.games[game_id]
-        await game.set_player_ready(player_id, ready)
+        event = GameEvent(
+            type=GameEventType.PLAYER_READY if ready else GameEventType.PLAYER_UNREADY,
+            player_id=player_id
+        )
+        await game.handle_event(event)
 
-        player = game.get_player(player_id)
+        player = game.players.get(player_id)
         if player:
             await self.broadcast_to_game(game_id, player_ready_message(
                 player_id=player_id,
@@ -260,7 +275,7 @@ class GameServer:
 
         # Check if all ready and can start
         if game.all_players_ready():
-            await game.start_game()
+            await game.handle_event(GameEvent(type=GameEventType.GAME_START))
 
     async def handle_location_choice(self, player_id: str, data: dict):
         """Handle LOCATION_CHOICE message."""
@@ -270,7 +285,12 @@ class GameServer:
 
         parsed = parse_location_choice_message(data)
         game = self.games[game_id]
-        await game.submit_location_choice(player_id, parsed["location_index"])
+        event = GameEvent(
+            type=GameEventType.LOCATION_CHOICE,
+            player_id=player_id,
+            data={"location_index": parsed["location_index"]}
+        )
+        await game.handle_event(event)
 
     async def handle_escape_choice(self, player_id: str, data: dict):
         """Handle ESCAPE_CHOICE message."""
@@ -280,7 +300,12 @@ class GameServer:
 
         parsed = parse_escape_choice_message(data)
         game = self.games[game_id]
-        await game.submit_escape_choice(player_id, parsed["option_id"])
+        event = GameEvent(
+            type=GameEventType.ESCAPE_CHOICE,
+            player_id=player_id,
+            data={"option_id": parsed["option_id"]}
+        )
+        await game.handle_event(event)
 
     async def handle_shop_purchase(self, player_id: str, data: dict):
         """Handle SHOP_PURCHASE message."""
@@ -290,7 +315,12 @@ class GameServer:
 
         parsed = parse_shop_purchase_message(data)
         game = self.games[game_id]
-        await game.handle_shop_purchase(player_id, parsed["passive_id"])
+        event = GameEvent(
+            type=GameEventType.SHOP_PURCHASE,
+            player_id=player_id,
+            data={"passive_id": parsed["passive_id"]}
+        )
+        await game.handle_event(event)
 
     async def handle_skip_shop(self, player_id: str):
         """Handle SKIP_SHOP message."""
@@ -299,7 +329,11 @@ class GameServer:
             return
 
         game = self.games[game_id]
-        await game.handle_shop_done(player_id)
+        event = GameEvent(
+            type=GameEventType.SHOP_SKIP,
+            player_id=player_id
+        )
+        await game.handle_event(event)
 
     async def handle_disconnect(self, player_id: str):
         """Handle player disconnection."""
@@ -310,7 +344,11 @@ class GameServer:
         game_id = client.game_id
         if game_id and game_id in self.games:
             game = self.games[game_id]
-            await game.remove_player(player_id)
+            event = GameEvent(
+                type=GameEventType.PLAYER_LEAVE,
+                player_id=player_id
+            )
+            await game.handle_event(event)
 
             # Notify others
             await self.broadcast_to_game(game_id, player_left_message(
@@ -353,7 +391,7 @@ class GameServer:
             if player_id != exclude:
                 await self.send_to_player(player_id, message)
 
-    async def send_lobby_state(self, game: ServerGameEngine):
+    async def send_lobby_state(self, game: EventDrivenGameEngine):
         """Send lobby state to all players in a game."""
         players_list = [p.to_public_dict() for p in game.players.values()]
         host_id = game.player_order[0] if game.player_order else ""
