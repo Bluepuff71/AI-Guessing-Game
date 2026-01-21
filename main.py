@@ -11,12 +11,18 @@ Supports:
 - Online multiplayer
 """
 import sys
+import os
 import io
 
-# Fix Windows console encoding for emojis
+# Fix Windows console/terminal compatibility
 if sys.platform == 'win32':
+    # Fix encoding for emojis
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    # Clear TERM variable to fix prompt_toolkit in Windows Terminal
+    # prompt_toolkit expects native Windows console, not xterm-256color
+    if 'TERM' in os.environ:
+        del os.environ['TERM']
 
 import asyncio
 from client.main import GameClient
