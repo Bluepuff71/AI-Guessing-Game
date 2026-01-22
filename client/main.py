@@ -610,12 +610,10 @@ class GameClient:
                 return
 
             # Handle events from handler
-            if self.handler.phase_changed:
-                self.handler.phase_changed = False
-                if self.state.phase == ClientPhase.SHOP:
-                    self._handle_shop_phase()
-                elif self.state.phase == ClientPhase.CHOOSING:
-                    self._handle_choosing_phase()
+            # IMPORTANT: Process escape results BEFORE phase changes (shop/choosing)
+            # to ensure escape outcome is shown before the next round's shop appears.
+            # This fixes a bug where SHOP_STATE and ESCAPE_RESULT arriving in the
+            # same poll cycle would show the shop before the escape result.
 
             if self.handler.last_round_result:
                 result = self.handler.last_round_result
@@ -638,6 +636,14 @@ class GameClient:
                     play_elimination_animation()
                 ui.print_escape_result(result)
                 ui.wait_for_enter()
+
+            # Process phase changes (shop/choosing) AFTER escape-related events
+            if self.handler.phase_changed:
+                self.handler.phase_changed = False
+                if self.state.phase == ClientPhase.SHOP:
+                    self._handle_shop_phase()
+                elif self.state.phase == ClientPhase.CHOOSING:
+                    self._handle_choosing_phase()
 
             # Small delay to avoid spinning
             time.sleep(0.05)
