@@ -227,6 +227,18 @@ class MessageHandler:
         self.state.timer_seconds = data.get("timer_seconds", 30)
         self.state.previous_ai_location = data.get("previous_ai_location")
         self.state.active_events = data.get("active_events", [])
+
+        # Update locations if provided (ensures locations are always current)
+        if "locations" in data:
+            self.state.locations.clear()
+            for loc in data.get("locations", []):
+                self.state.locations.append(LocationInfo(
+                    name=loc.get("name"),
+                    emoji=loc.get("emoji"),
+                    min_points=loc.get("min_points", 0),
+                    max_points=loc.get("max_points", 0),
+                ))
+
         self._apply_events_to_locations()
 
         self.state.phase = ClientPhase.CHOOSING

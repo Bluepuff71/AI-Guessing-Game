@@ -325,6 +325,11 @@ def get_lobby_action(is_host: bool, is_ready: bool) -> Optional[str]:
 
 def get_location_choice(state: GameState) -> int:
     """Get location choice from user using arrow key selection."""
+    # Defensive check: if no locations available, return 0 and log error
+    if not state.locations:
+        print_error("No locations available. This may be a sync issue.")
+        return 0
+
     choices = []
     for loc in state.locations:
         event_str = ""

@@ -221,6 +221,7 @@ def round_start_message(
     active_events: List[Dict[str, Any]],
     new_events: List[Dict[str, Any]],
     standings: List[Dict[str, Any]],
+    locations: List[Dict[str, Any]],
     previous_ai_location: Optional[str] = None
 ) -> Message:
     """Build round start message."""
@@ -233,6 +234,7 @@ def round_start_message(
             "active_events": active_events,
             "new_events": new_events,
             "standings": standings,
+            "locations": locations,
             "previous_ai_location": previous_ai_location
         }
     )
