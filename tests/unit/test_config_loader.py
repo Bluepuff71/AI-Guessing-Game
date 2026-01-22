@@ -44,24 +44,24 @@ class TestConfigLoading:
 
         assert config.game_settings is not None
         assert config.locations_config is not None
-        assert config.items_config is not None
+        assert config.passives_config is not None
 
     def test_missing_file_returns_empty_dict(self, temp_config_dir, capsys):
         """Test missing config file returns empty dict with warning."""
-        # Remove one config file
-        (temp_config_dir / "items.json").unlink()
+        # Remove one config file (locations.json is created by temp_config_dir)
+        (temp_config_dir / "locations.json").unlink()
 
         ConfigLoader._instance = None
         ConfigLoader._config_dir = str(temp_config_dir)
 
         config = ConfigLoader()
 
-        assert config.items_config == {}
+        assert config.locations_config == {}
 
         # Check warning was printed
         captured = capsys.readouterr()
         assert "Warning" in captured.out
-        assert "items.json" in captured.out
+        assert "locations.json" in captured.out
 
     def test_invalid_json_returns_empty_dict(self, temp_config_dir, capsys):
         """Test invalid JSON returns empty dict with warning."""
@@ -147,8 +147,8 @@ class TestGetMethod:
         assert isinstance(value, dict)
 
 
-class TestGetLocationsAndItems:
-    """Tests for get_locations() and get_items() methods."""
+class TestGetLocationsAndPassives:
+    """Tests for get_locations() and get_passives() methods."""
 
     def test_get_locations_returns_list(self, temp_config_dir):
         """Test get_locations() returns location list."""
@@ -161,16 +161,15 @@ class TestGetLocationsAndItems:
         assert isinstance(locations, list)
         assert len(locations) == 3  # Test config has 3 locations
 
-    def test_get_items_returns_list(self, temp_config_dir):
-        """Test get_items() returns item list."""
+    def test_get_passives_returns_list(self, temp_config_dir):
+        """Test get_passives() returns passives list."""
         ConfigLoader._instance = None
         ConfigLoader._config_dir = str(temp_config_dir)
 
         config = ConfigLoader()
 
-        items = config.get_items()
-        assert isinstance(items, list)
-        assert len(items) == 2  # Test config has 2 items (intel_report, scout)
+        passives = config.get_passives()
+        assert isinstance(passives, list)
 
     def test_get_locations_empty_on_missing_key(self, temp_config_dir):
         """Test get_locations() returns empty list when 'locations' key missing."""
@@ -185,15 +184,15 @@ class TestGetLocationsAndItems:
         locations = config.get_locations()
         assert locations == []
 
-    def test_get_items_empty_on_missing_key(self, temp_config_dir):
-        """Test get_items() returns empty list when 'items' key missing."""
-        # Write config without 'items' key
-        (temp_config_dir / "items.json").write_text(json.dumps({}))
+    def test_get_passives_empty_on_missing_key(self, temp_config_dir):
+        """Test get_passives() returns empty list when 'passives' key missing."""
+        # Write config without 'passives' key
+        (temp_config_dir / "passives.json").write_text(json.dumps({}))
 
         ConfigLoader._instance = None
         ConfigLoader._config_dir = str(temp_config_dir)
 
         config = ConfigLoader()
 
-        items = config.get_items()
-        assert items == []
+        passives = config.get_passives()
+        assert passives == []

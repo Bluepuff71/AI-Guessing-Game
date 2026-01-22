@@ -123,10 +123,12 @@ def _restart_without_flag(new_path: Path) -> None:
     """
     try:
         if platform.system() == "Windows":
-            # Use subprocess to start the new process detached
+            # Use CREATE_NEW_CONSOLE to spawn a new console window for the app.
+            # DETACHED_PROCESS would create a process without a console, causing
+            # blank screen since this is a terminal UI application.
             subprocess.Popen(
                 [str(new_path)],
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
                 close_fds=True
             )
         else:
@@ -214,9 +216,12 @@ def launch_new_executable(new_exe_path: Path, old_exe_path: Path) -> bool:
         args = [str(new_exe_path), "--replace-old", str(old_exe_path)]
 
         if platform.system() == "Windows":
+            # Use CREATE_NEW_CONSOLE to spawn a new console window for the app.
+            # DETACHED_PROCESS would create a process without a console, causing
+            # blank screen since this is a terminal UI application.
             subprocess.Popen(
                 args,
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
                 close_fds=True
             )
         else:

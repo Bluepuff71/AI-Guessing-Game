@@ -11,7 +11,6 @@ import numpy as np
 
 from game.player import Player
 from game.locations import LocationManager, Location
-from game.items import ItemShop, ItemType
 from game.config_loader import ConfigLoader
 from game import config_loader
 
@@ -56,24 +55,6 @@ def temp_config_dir(tmp_path, monkeypatch):
         ]
     }
 
-    # Create test items.json
-    items = {
-        "items": [
-            {
-                "id": "intel_report",
-                "name": "Intel Report",
-                "cost": 10,
-                "description": "See your AI threat level and predictability"
-            },
-            {
-                "id": "scout",
-                "name": "Scout",
-                "cost": 6,
-                "description": "Preview loot rolls before choosing (single use)"
-            }
-        ]
-    }
-
     # Create test game_settings.json
     game_settings = {
         "game": {
@@ -89,30 +70,26 @@ def temp_config_dir(tmp_path, monkeypatch):
 
     # Write files
     (config_dir / "locations.json").write_text(json.dumps(locations, indent=2))
-    (config_dir / "items.json").write_text(json.dumps(items, indent=2))
     (config_dir / "game_settings.json").write_text(json.dumps(game_settings, indent=2))
 
     # Reset the singleton instance FIRST
     ConfigLoader._instance = None
-    ItemShop.ITEMS = None
 
     # Patch _get_base_path to return tmp_path (parent of config_dir)
     monkeypatch.setattr(config_loader, '_get_base_path', lambda: str(tmp_path))
 
     # Force reload by creating new instance
-    from game import locations, items
+    from game import locations as locations_module
     new_config = ConfigLoader()
     monkeypatch.setattr(config_loader, 'config', new_config)
 
     # Also patch config in modules that import it
-    monkeypatch.setattr(locations, 'config', new_config)
-    monkeypatch.setattr(items, 'config', new_config)
+    monkeypatch.setattr(locations_module, 'config', new_config)
 
     yield config_dir
 
     # Cleanup: reset singleton
     ConfigLoader._instance = None
-    ItemShop.ITEMS = None
 
 
 @pytest.fixture
@@ -204,15 +181,6 @@ def mock_ml_model(monkeypatch):
         pass
 
     return MockBooster()
-
-
-@pytest.fixture
-def sample_items(temp_config_dir):
-    """Get sample items for testing."""
-    return {
-        'intel_report': ItemShop.get_item(ItemType.INTEL_REPORT),
-        'scout': ItemShop.get_item(ItemType.SCOUT)
-    }
 
 
 @pytest.fixture
