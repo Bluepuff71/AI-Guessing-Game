@@ -1,14 +1,28 @@
 """Configuration loader for game settings."""
 import json
 import os
+import sys
 from typing import Dict, Any
+
+
+def _get_base_path() -> str:
+    """Get the base path for the application.
+
+    When running from PyInstaller bundle, returns the path where files are extracted.
+    When running from source, returns the project root directory.
+    """
+    if getattr(sys, 'frozen', False):
+        # Running from PyInstaller bundle - use the bundle's base path
+        return sys._MEIPASS
+    else:
+        # Running from source - config is relative to this file's parent directory
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class ConfigLoader:
     """Loads and provides access to game configuration."""
 
     _instance = None
-    _config_dir = "config"
 
     def __new__(cls):
         """Singleton pattern to ensure only one config loader."""
@@ -19,6 +33,7 @@ class ConfigLoader:
 
     def _load_all_configs(self):
         """Load all configuration files."""
+        self._config_dir = os.path.join(_get_base_path(), "config")
         self.game_settings = self._load_json("game_settings.json")
         self.locations_config = self._load_json("locations.json")
         self.items_config = self._load_json("items.json")

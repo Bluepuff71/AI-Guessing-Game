@@ -13,6 +13,7 @@ from game.player import Player
 from game.locations import LocationManager, Location
 from game.items import ItemShop, ItemType
 from game.config_loader import ConfigLoader
+from game import config_loader
 
 
 @pytest.fixture(autouse=True)
@@ -95,11 +96,11 @@ def temp_config_dir(tmp_path, monkeypatch):
     ConfigLoader._instance = None
     ItemShop.ITEMS = None
 
-    # Patch the class-level _config_dir attribute
-    monkeypatch.setattr(ConfigLoader, '_config_dir', str(config_dir))
+    # Patch _get_base_path to return tmp_path (parent of config_dir)
+    monkeypatch.setattr(config_loader, '_get_base_path', lambda: str(tmp_path))
 
     # Force reload by creating new instance
-    from game import config_loader, locations, items
+    from game import locations, items
     new_config = ConfigLoader()
     monkeypatch.setattr(config_loader, 'config', new_config)
 
