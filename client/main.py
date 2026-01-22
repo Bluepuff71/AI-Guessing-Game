@@ -17,6 +17,7 @@ from client.state import GameState, ClientPhase
 from client.handler import MessageHandler
 from client.lan import LANDiscovery, DISCOVERY_PORT
 from client import ui
+from game.animations import play_elimination_animation, play_escape_animation
 from utils.process import wait_for_server, is_server_running
 from version import VERSION
 
@@ -630,6 +631,11 @@ class GameClient:
             if self.handler.last_escape_result:
                 result = self.handler.last_escape_result
                 self.handler.last_escape_result = None
+                # Play animation based on escape result
+                if result.get("escaped"):
+                    play_escape_animation()
+                else:
+                    play_elimination_animation()
                 ui.print_escape_result(result)
                 ui.wait_for_enter()
 
