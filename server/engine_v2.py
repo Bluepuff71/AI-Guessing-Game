@@ -480,6 +480,14 @@ class EventDrivenGameEngine:
         """Start the location choosing phase."""
         self._phase = GamePhase.CHOOSING
 
+        # Build location data for the message
+        locations = [{
+            "name": loc.name,
+            "emoji": loc.emoji,
+            "min_points": loc.min_points,
+            "max_points": loc.max_points,
+        } for loc in self.location_manager.get_all()]
+
         await self.broadcast(round_start_message(
             round_num=self.round_num,
             timer_seconds=self.turn_timer_seconds,
@@ -487,6 +495,7 @@ class EventDrivenGameEngine:
             active_events=self._build_active_events(),
             new_events=[],
             standings=self._build_standings(),
+            locations=locations,
             previous_ai_location=self.last_ai_search_location.name if self.last_ai_search_location else None
         ))
 
