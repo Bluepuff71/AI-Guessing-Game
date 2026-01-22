@@ -73,7 +73,45 @@ if __name__ == "__main__":
         print("\n\nGame interrupted. Thanks for playing!\n")
         sys.exit(0)
     except Exception as e:
-        print(f"\nAn error occurred: {e}\n")
         import traceback
-        traceback.print_exc()
+        import platform
+        import os
+
+        print(f"\n{'='*60}", flush=True)
+        print("AN ERROR OCCURRED", flush=True)
+        print('='*60, flush=True)
+
+        # Error details
+        print(f"\nError Type: {type(e).__name__}", flush=True)
+        print(f"Error Message: {e}\n", flush=True)
+
+        # Full traceback
+        print("Full Traceback:", flush=True)
+        print("-" * 40, flush=True)
+        traceback.print_exc(file=sys.stdout)
+        sys.stdout.flush()
+
+        # System information for debugging
+        print(f"\n{'-'*40}", flush=True)
+        print("System Information:", flush=True)
+        print(f"  Python Version: {sys.version}", flush=True)
+        print(f"  Platform: {platform.platform()}", flush=True)
+        print(f"  Executable: {sys.executable}", flush=True)
+        print(f"  Frozen (PyInstaller): {getattr(sys, 'frozen', False)}", flush=True)
+        print(f"  Working Directory: {os.getcwd()}", flush=True)
+
+        # Try to get game version
+        try:
+            from version import VERSION
+            print(f"  Game Version: {VERSION}", flush=True)
+        except Exception:
+            print("  Game Version: Unknown", flush=True)
+
+        # Show command line args if any
+        if len(sys.argv) > 1:
+            print(f"  Arguments: {sys.argv[1:]}", flush=True)
+
+        print(f"\n{'='*60}", flush=True)
+        print("Press Enter to exit...", flush=True)
+        input()
         sys.exit(1)
