@@ -36,7 +36,6 @@ class ConfigLoader:
         self._config_dir = os.path.join(_get_base_path(), "config")
         self.game_settings = self._load_json("game_settings.json")
         self.locations_config = self._load_json("locations.json")
-        self.items_config = self._load_json("items.json")
         self.hiding_config = self._load_json("hiding.json")
         self.events_config = self._load_json("events.json")
         self.passives_config = self._load_json("passives.json")
@@ -67,10 +66,6 @@ class ConfigLoader:
     def get_locations(self):
         """Get locations configuration."""
         return self.locations_config.get('locations', [])
-
-    def get_items(self):
-        """Get items configuration."""
-        return self.items_config.get('items', [])
 
     def get_hiding_mechanics(self):
         """Get hiding mechanics configuration."""

@@ -156,15 +156,13 @@ class TestLaunchNewExecutable:
     """Tests for launch_new_executable() function."""
 
     def test_launch_windows(self, tmp_path, monkeypatch):
-        """Test launching new executable on Windows."""
+        """Test launching new executable on Windows uses CREATE_NEW_CONSOLE."""
         import updater
         monkeypatch.setattr('platform.system', lambda: 'Windows')
 
         # Mock Windows-specific subprocess constants when running on non-Windows
-        if not hasattr(subprocess, 'DETACHED_PROCESS'):
-            subprocess.DETACHED_PROCESS = 0x00000008
-        if not hasattr(subprocess, 'CREATE_NEW_PROCESS_GROUP'):
-            subprocess.CREATE_NEW_PROCESS_GROUP = 0x00000200
+        if not hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
+            subprocess.CREATE_NEW_CONSOLE = 0x00000010
 
         new_exe = tmp_path / "LootRun_new.exe"
         new_exe.write_bytes(b"new exe")
@@ -180,6 +178,8 @@ class TestLaunchNewExecutable:
         assert str(new_exe) in call_args[0][0]
         assert "--replace-old" in call_args[0][0]
         assert str(old_exe) in call_args[0][0]
+        # Should use CREATE_NEW_CONSOLE for terminal apps
+        assert call_args[1]['creationflags'] == subprocess.CREATE_NEW_CONSOLE
 
     def test_launch_unix(self, tmp_path, monkeypatch):
         """Test launching new executable on Unix."""
@@ -292,15 +292,13 @@ class TestRestartWithoutFlag:
     """Tests for _restart_without_flag() function."""
 
     def test_restart_windows(self, tmp_path, monkeypatch):
-        """Test restart on Windows."""
+        """Test restart on Windows uses CREATE_NEW_CONSOLE for terminal apps."""
         import updater
         monkeypatch.setattr('platform.system', lambda: 'Windows')
 
         # Mock Windows-specific subprocess constants when running on non-Windows
-        if not hasattr(subprocess, 'DETACHED_PROCESS'):
-            subprocess.DETACHED_PROCESS = 0x00000008
-        if not hasattr(subprocess, 'CREATE_NEW_PROCESS_GROUP'):
-            subprocess.CREATE_NEW_PROCESS_GROUP = 0x00000200
+        if not hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
+            subprocess.CREATE_NEW_CONSOLE = 0x00000010
 
         new_path = tmp_path / "LootRun.exe"
 
@@ -311,8 +309,9 @@ class TestRestartWithoutFlag:
         mock_popen.assert_called_once()
         call_args = mock_popen.call_args
         assert str(new_path) in call_args[0][0]
-        # Should have Windows-specific flags
+        # Should use CREATE_NEW_CONSOLE for terminal apps (not DETACHED_PROCESS)
         assert 'creationflags' in call_args[1]
+        assert call_args[1]['creationflags'] == subprocess.CREATE_NEW_CONSOLE
 
     def test_restart_unix(self, tmp_path, monkeypatch):
         """Test restart on Unix."""

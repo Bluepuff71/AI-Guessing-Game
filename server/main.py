@@ -18,7 +18,9 @@ from dataclasses import dataclass, field
 
 # Suppress websockets library errors from TCP probes (health checks that don't
 # complete WebSocket handshake). These are cosmetic and don't affect functionality.
-logging.getLogger("websockets").setLevel(logging.ERROR)
+# Set to CRITICAL to suppress ERROR-level messages like "opening handshake failed"
+# caused by wait_for_server() TCP connection tests.
+logging.getLogger("websockets").setLevel(logging.CRITICAL)
 
 try:
     import websockets
