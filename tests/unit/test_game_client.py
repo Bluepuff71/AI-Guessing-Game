@@ -458,16 +458,17 @@ class TestLobbyLoop:
     def test_lobby_loop_exits_on_phase_change(self, mock_network, monkeypatch):
         """Test that lobby loop exits when phase changes."""
         monkeypatch.setattr("client.ui.print_lobby", lambda s, h: None)
-        monkeypatch.setattr("client.ui.get_input", lambda p: "")
+        monkeypatch.setattr("client.ui.get_lobby_action", lambda h, r: "refresh")
         monkeypatch.setattr(time, "sleep", lambda x: None)
 
         client = GameClient()
         client._network = mock_network([])
         client.state.phase = ClientPhase.LOBBY
+        client.state.player_id = "p1"
+        client.state.players["p1"] = PlayerInfo(player_id="p1", username="Test", ready=False)
 
         # After first iteration, change phase
         call_count = [0]
-        original_poll = client._poll_all_networks
 
         def mock_poll():
             call_count[0] += 1
@@ -491,12 +492,14 @@ class TestLobbyLoop:
         monkeypatch.setattr("client.ui.print_info", lambda m: None)
         monkeypatch.setattr("client.ui.wait_for_enter", lambda: None)
         monkeypatch.setattr("client.ui.print_lobby", lambda s, h: None)
-        monkeypatch.setattr("client.ui.get_input", lambda p: "")
+        monkeypatch.setattr("client.ui.get_lobby_action", lambda h, r: "refresh")
         monkeypatch.setattr(time, "sleep", lambda x: None)
 
         client = GameClient()
         client._network = mock_network([{"type": "CONNECTION_LOST"}])
         client.state.phase = ClientPhase.LOBBY
+        client.state.player_id = "p1"
+        client.state.players["p1"] = PlayerInfo(player_id="p1", username="Test", ready=False)
 
         client._lobby_loop(is_host=False)
 
@@ -504,11 +507,11 @@ class TestLobbyLoop:
 
     def test_lobby_loop_ready_toggle(self, mock_network, monkeypatch):
         """Test toggling ready status in lobby."""
-        inputs = ["r", ""]
-        input_gen = iter(inputs)
+        # First call returns "ready", subsequent calls return "refresh"
+        actions = iter(["ready", "refresh"])
 
         monkeypatch.setattr("client.ui.print_lobby", lambda s, h: None)
-        monkeypatch.setattr("client.ui.get_input", lambda p: next(input_gen, ""))
+        monkeypatch.setattr("client.ui.get_lobby_action", lambda h, r: next(actions, "refresh"))
         monkeypatch.setattr(time, "sleep", lambda x: None)
 
         network = mock_network([])
@@ -536,11 +539,11 @@ class TestLobbyLoop:
 
     def test_lobby_loop_unready(self, mock_network, monkeypatch):
         """Test sending unready when already ready."""
-        inputs = ["r", ""]
-        input_gen = iter(inputs)
+        # First call returns "unready", subsequent calls return "refresh"
+        actions = iter(["unready", "refresh"])
 
         monkeypatch.setattr("client.ui.print_lobby", lambda s, h: None)
-        monkeypatch.setattr("client.ui.get_input", lambda p: next(input_gen, ""))
+        monkeypatch.setattr("client.ui.get_lobby_action", lambda h, r: next(actions, "refresh"))
         monkeypatch.setattr(time, "sleep", lambda x: None)
 
         network = mock_network([])
@@ -567,12 +570,12 @@ class TestLobbyLoop:
         assert any(m["message_type"] == "UNREADY" for m in network.sent_messages)
 
     def test_lobby_loop_host_start(self, mock_network, monkeypatch):
-        """Test host starting game with 's' command."""
-        inputs = ["s", ""]
-        input_gen = iter(inputs)
+        """Test host starting game with 'start' action."""
+        # First call returns "start", subsequent calls return "refresh"
+        actions = iter(["start", "refresh"])
 
         monkeypatch.setattr("client.ui.print_lobby", lambda s, h: None)
-        monkeypatch.setattr("client.ui.get_input", lambda p: next(input_gen, ""))
+        monkeypatch.setattr("client.ui.get_lobby_action", lambda h, r: next(actions, "refresh"))
         monkeypatch.setattr(time, "sleep", lambda x: None)
 
         network = mock_network([])

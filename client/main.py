@@ -521,27 +521,31 @@ class GameClient:
         return None
 
     def _poll_all_networks(self):
-        """Poll all network threads and process messages.
+        """Poll all network threads and process ALL pending messages.
 
         Returns True if connection is still good, False if connection lost.
         """
-        # Poll primary network
+        # Poll primary network - drain all pending messages
         if self._network:
-            msg = self._network.poll(timeout=POLL_TIMEOUT)
-            if msg:
+            while True:
+                msg = self._network.poll(timeout=POLL_TIMEOUT)
+                if not msg:
+                    break
                 if msg["type"] == "SERVER_MESSAGE":
                     self.handler.handle(msg["message_type"], msg["data"])
                 elif msg["type"] == "CONNECTION_LOST":
                     self._connection_lost = True
                     return False
 
-        # Poll additional networks (for hot-seat)
+        # Poll additional networks (for hot-seat) - drain all pending messages
         for pid, network in self._local_networks.items():
             if network == self._network:
                 continue  # Already polled
 
-            msg = network.poll(timeout=0.01)  # Quick poll for secondary connections
-            if msg:
+            while True:
+                msg = network.poll(timeout=0.01)  # Quick poll for secondary connections
+                if not msg:
+                    break
                 if msg["type"] == "SERVER_MESSAGE":
                     # Secondary connections mainly care about WELCOME and escape phases
                     if msg["message_type"] in ("WELCOME", "ESCAPE_PHASE", "ESCAPE_RESULT"):
@@ -565,21 +569,27 @@ class GameClient:
                 ui.wait_for_enter()
                 return
 
+            # Check if phase changed (game started by server)
+            if self.state.phase != ClientPhase.LOBBY:
+                break
+
             ui.print_lobby(self.state, is_host)
 
-            # Simple input handling (non-blocking would be better but questionary doesn't support it)
-            inp = ui.get_input("> ").lower()
+            # Get player's ready state
+            player = self.state.players.get(self.state.player_id)
+            is_ready = player.ready if player else False
 
-            if inp == "r":
-                player = self.state.players.get(self.state.player_id)
-                if player and player.ready:
-                    self._network.send("UNREADY", {})
-                else:
-                    self._network.send("READY", {})
+            # Get lobby action using questionary menu
+            action = ui.get_lobby_action(is_host, is_ready)
 
-            elif inp == "s" and is_host:
+            if action == "ready":
+                self._network.send("READY", {})
+            elif action == "unready":
+                self._network.send("UNREADY", {})
+            elif action == "start" and is_host:
                 # Start game (by setting ready, game auto-starts when all ready)
                 self._network.send("READY", {})
+            # "refresh" action just continues the loop to poll and redraw
 
             # Small delay to avoid spinning
             time.sleep(0.1)

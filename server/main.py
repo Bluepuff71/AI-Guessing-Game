@@ -10,10 +10,15 @@ This module provides:
 
 import asyncio
 import json
+import logging
 import uuid
 import argparse
 from typing import Dict, Set, Optional
 from dataclasses import dataclass, field
+
+# Suppress websockets library errors from TCP probes (health checks that don't
+# complete WebSocket handshake). These are cosmetic and don't affect functionality.
+logging.getLogger("websockets").setLevel(logging.ERROR)
 
 try:
     import websockets

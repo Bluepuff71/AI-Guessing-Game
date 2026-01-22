@@ -79,11 +79,6 @@ def print_lobby(state: GameState, is_host: bool = False):
     console.print(table)
     console.print()
 
-    if is_host:
-        console.print("[dim]Press [bold]R[/bold] when ready, [bold]S[/bold] to start game[/dim]")
-    else:
-        console.print("[dim]Press [bold]R[/bold] to toggle ready[/dim]")
-
 
 def print_standings(state: GameState):
     """Print current standings."""
@@ -288,6 +283,44 @@ def get_shop_choice(state: GameState, player: PlayerInfo) -> Optional[int]:
 def get_input(prompt: str = "") -> str:
     """Get input from user."""
     return console.input(prompt).strip()
+
+
+def get_lobby_action(is_host: bool, is_ready: bool) -> Optional[str]:
+    """Get lobby action from user using questionary menu.
+
+    Args:
+        is_host: Whether the current player is the host
+        is_ready: Whether the current player is ready
+
+    Returns:
+        Action string: "ready", "unready", "start", or None if cancelled
+    """
+    choices = []
+
+    if is_ready:
+        choices.append({"name": "Not Ready", "value": "unready"})
+    else:
+        choices.append({"name": "Ready", "value": "ready"})
+
+    if is_host:
+        choices.append({"name": "Start Game", "value": "start"})
+
+    choices.append({"name": "Refresh", "value": "refresh"})
+
+    result = questionary.select(
+        "What would you like to do?",
+        choices=[c["name"] for c in choices],
+        use_indicator=True,
+        use_shortcuts=False,
+    ).ask()
+
+    if result is None:
+        return None
+
+    for c in choices:
+        if c["name"] == result:
+            return c["value"]
+    return None
 
 
 def get_location_choice(state: GameState) -> int:
