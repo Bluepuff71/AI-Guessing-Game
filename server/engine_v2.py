@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from game.locations import LocationManager, Location
 from game.events import EventManager
 from game.hiding import HidingManager
-from game.passives import PassiveManager
+from game.passives import PassiveManager, PassiveShop
 from ai.predictor import AIPredictor
 from ai.escape_predictor import EscapePredictor
 
@@ -461,11 +461,23 @@ class EventDrivenGameEngine:
         # Send shop state to each player
         for player in self.alive_players:
             if player.connected:
-                # TODO: Generate shop offerings
+                # Get passives the player doesn't already own
+                owned_types = {p.type for p in player.owned_passives}
+                available = [
+                    {
+                        "id": p.type.value,
+                        "name": p.name,
+                        "cost": p.cost,
+                        "description": p.description,
+                        "emoji": p.emoji
+                    }
+                    for p in PassiveShop.get_all_passives()
+                    if p.type not in owned_types
+                ]
                 await self.send_to_player(player.player_id, shop_state_message(
                     player_id=player.player_id,
                     player_points=player.points,
-                    available_passives=[],
+                    available_passives=available,
                     owned_passives=[p.type.value for p in player.owned_passives],
                     timer_seconds=self.shop_timer_seconds
                 ))
@@ -659,10 +671,12 @@ class EventDrivenGameEngine:
 
         chosen_option_id = escape.chosen_option_id
         chosen_option = None
+        ai_predicted_option = None
         for opt in escape.escape_options:
             if opt["id"] == chosen_option_id:
                 chosen_option = opt
-                break
+            if opt["id"] == escape.ai_prediction:
+                ai_predicted_option = opt
 
         if not chosen_option:
             chosen_option = escape.escape_options[0] if escape.escape_options else None
@@ -685,13 +699,14 @@ class EventDrivenGameEngine:
             player.alive = False
 
         # Broadcast result
+        ai_prediction_name = ai_predicted_option.get("name", escape.ai_prediction) if ai_predicted_option else escape.ai_prediction
         await self.broadcast(escape_result_message(
             player_id=player.player_id,
             username=player.username,
             player_choice=chosen_option_id,
             player_choice_name=chosen_option.get("name", chosen_option_id),
             ai_prediction=escape.ai_prediction,
-            ai_prediction_name=escape.ai_prediction,
+            ai_prediction_name=ai_prediction_name,
             ai_reasoning=escape.ai_reasoning,
             escaped=result["escaped"],
             points_awarded=result.get("points_awarded", 0),
