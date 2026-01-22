@@ -119,49 +119,58 @@ def connect_and_join(
     network: NetworkThread,
     server_url: str,
     username: str,
-    timeout: float = CONNECTION_TIMEOUT
+    timeout: float = CONNECTION_TIMEOUT,
+    max_retries: int = 3
 ) -> tuple[bool, Optional[str], Optional[str]]:
     """Connect to server and join the game.
 
     Returns:
         Tuple of (success, player_id, game_id)
     """
-    if not network.start(server_url):
-        return False, None, None
+    for attempt in range(max_retries):
+        if attempt > 0:
+            # Wait before retry to allow port cleanup
+            time.sleep(0.5)
+            # Reset network state for retry
+            network.stop()
+            time.sleep(0.2)
 
-    # Wait for connection
-    start_time = time.time()
-    connected = False
-    while time.time() - start_time < timeout:
-        msg = network.poll(timeout=POLL_TIMEOUT)
-        if msg:
-            if msg["type"] == "CONNECTED":
-                connected = True
-                break
-            elif msg["type"] == "CONNECTION_LOST":
-                return False, None, None
+        if not network.start(server_url):
+            continue
 
-    if not connected:
-        return False, None, None
+        # Wait for connection
+        start_time = time.time()
+        connected = False
+        while time.time() - start_time < timeout:
+            msg = network.poll(timeout=POLL_TIMEOUT)
+            if msg:
+                if msg["type"] == "CONNECTED":
+                    connected = True
+                    break
+                elif msg["type"] == "CONNECTION_LOST":
+                    break
 
-    # Send JOIN message
-    network.send("JOIN", {"username": username, "version": VERSION})
+        if not connected:
+            continue
 
-    # Wait for WELCOME response
-    player_id = None
-    game_id = None
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        msg = network.poll(timeout=POLL_TIMEOUT)
-        if msg:
-            if msg["type"] == "SERVER_MESSAGE":
-                if msg["message_type"] == "WELCOME":
-                    player_id = msg["data"].get("player_id")
-                    game_id = msg["data"].get("game_id")
-                    if player_id and game_id:
-                        return True, player_id, game_id
-            elif msg["type"] == "CONNECTION_LOST":
-                return False, None, None
+        # Send JOIN message
+        network.send("JOIN", {"username": username, "version": VERSION})
+
+        # Wait for WELCOME response
+        player_id = None
+        game_id = None
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            msg = network.poll(timeout=POLL_TIMEOUT)
+            if msg:
+                if msg["type"] == "SERVER_MESSAGE":
+                    if msg["message_type"] == "WELCOME":
+                        player_id = msg["data"].get("player_id")
+                        game_id = msg["data"].get("game_id")
+                        if player_id and game_id:
+                            return True, player_id, game_id
+                elif msg["type"] == "CONNECTION_LOST":
+                    break
 
     return False, None, None
 

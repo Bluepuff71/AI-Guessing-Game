@@ -73,8 +73,8 @@ def kill_process_on_port(port: int) -> None:
             except Exception:
                 pass
 
-        # Wait for port to be released
-        time.sleep(0.5)
+        # Wait for port to be released (Windows can be slow)
+        time.sleep(1.0)
     except Exception:
         pass  # Best effort - don't fail tests if cleanup fails
 
